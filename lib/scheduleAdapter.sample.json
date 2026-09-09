@@ -1,0 +1,31 @@
+[
+  {
+    "__section": "Vessels Expected To Move",
+    "Vessel": "MADELYN GRACE",
+    "Ordered": "09/0700",
+    "PBT": "09/1130",
+    "Status": "Dck/Sail",
+    "Length": "600",
+    "Beam": "106",
+    "DWT": "50137",
+    "Draft": "40' 0\"",
+    "Berth": "CS/B",
+    "Tug Co.": "BAY",
+    "LH": "HMT",
+    "Remarks": "DELAY TRAFFIC/TUGS"
+  },
+  {
+    "__section": "Vessels Moving within the VTIS",
+    "Vessel": "MARVEL HERON",
+    "Status": "I/B 09/0549",
+    "Length": "976",
+    "Beam": "161",
+    "DWT": "92659",
+    "Draft": "33' 2\"",
+    "Berth": "CLNG-S",
+    "Tug Co.": "MT",
+    "LH": "TSI",
+    "36": "09/0740",
+    "Remarks": "AOB SW CC (DC-TB) ** 2 PILOTS"
+  }
+]
