@@ -73,6 +73,10 @@ function sideToText(m){
   return n.SideTo || n["?ST"] || "—";
 }
 
+function isUnderway(m){
+  return m?.section==="MOVING" || m?.movement?.movement?.status==="MOVING";
+}
+
 export default function Home(){
   const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
@@ -137,11 +141,16 @@ function Overview({env,schedule,moving,expected,arriving,inPort,cam,lb36,camPred
   const modeled=liveUpcoming24h(moving,expected);
   return <section className="mainGrid"><div className="leftCol"><div className="metrics"><Metric n={moving.length} label="Vessels in VTIS" sub="Moving within region"/><Metric n={expected.length} label="Expected to Move" sub="Live schedule"/><Metric n={arriving.length} label="At or Near the Bar" sub="Arriving / Anchored"/><Metric n={inPort.length} label="Vessels in Port" sub="All facilities"/></div>
   <Card title="Live / Upcoming Traffic" right="NOW + 24 HOURS"><div className="tableWrap"><table className="overviewTraffic"><thead><tr>
-    <th>Vessel</th><th>Ordered</th><th>PBT</th><th>Berth</th><th>I/B · O/B</th><th>Length x Beam</th><th>Draft</th><th>SST / PST / TBD</th>
+    <th>Vessel</th><th>Key</th><th>Ordered</th><th>PBT</th><th>Berth</th><th>I/B · O/B</th><th>Length x Beam</th><th>Draft</th><th>SST / PST / TBD</th>
     <th>36 ETA</th><th>60 ETA</th><th>ICW ETA</th>
   </tr></thead>
   <tbody>{modeled.length?modeled.map((m,i)=>{const d=m.display||{},n=m.native||{};return <tr key={m.logId||i}>
-    <td className="vessel">{d.vessel||n.VesselName||"—"}</td>
+    <td className="vessel">
+      <span className="vesselState">{isUnderway(m)?<span className="underwayDot" title="Underway"/>:<span className="scheduledDot" title="Scheduled"/>}</span>
+      {d.vessel||n.VesselName||"—"}
+      {isUnderway(m)&&<span className="underwayLabel">UNDERWAY</span>}
+    </td>
+    <td className="pilotKey">{keyText(m)}</td>
     <td>{lcpDateTime(n.OrderedTime||m?.movement?.schedule?.orderedAt)}</td>
     <td>{d.pbt||n.PBT||"—"}</td>
     <td>{n.Berth||d.berth||"—"}</td>
@@ -152,7 +161,7 @@ function Overview({env,schedule,moving,expected,arriving,inPort,cam,lb36,camPred
     <td className="aiEta">{d.eta36||"—"}</td>
     <td className="aiEta">{d.eta60||"—"}</td>
     <td className="aiEta">{d.etaICW||"—"}</td>
-  </tr>}):<tr><td colSpan="11">No live or scheduled movements in the next 24 hours.</td></tr>}</tbody></table></div></Card>
+  </tr>}):<tr><td colSpan="12">No live or scheduled movements in the next 24 hours.</td></tr>}</tbody></table></div></Card>
   <Card title="AI Traffic Recommendation"><div className="recommendation"><div className="eyebrow">INITIAL PLANNING LOGIC</div><h2>Protect the narrowest environmental windows first.</h2><p>LCPTMS now has live structured schedule data. The next layer will compare vessel ETAs against current/tide windows and traffic constraints.</p></div></Card></div>
   <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/><Card title="Connection Status"><div className="envList"><Status label="LakeCharlesPilots.com schedule" good={!!schedule?.items?.length} text={schedule?.items?.length?"Live structured feed":"Unavailable"}/><Status label="NOAA PORTS" good={!!env?.sources?.noaa}/><Status label="NWS / KLCH" good={!!env?.sources?.nws}/><Status label="StormGeo" pending text="Pending integration"/></div></Card></div></section>
 }

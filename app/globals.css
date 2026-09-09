@@ -46,3 +46,12 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .overviewTraffic th,.overviewTraffic td{white-space:nowrap}
 .overviewTraffic .dimensionsCell{font-variant-numeric:tabular-nums;font-weight:650}
 .overviewTraffic .aiEta{font-weight:700}
+
+
+/* v1.2.3 Overview pilot assignment + underway state */
+.overviewTraffic .pilotKey{font-weight:800;color:#f7fbff;background:#16232c!important;min-width:72px}
+.vesselState{display:inline-flex;align-items:center;margin-right:7px;vertical-align:middle}
+.underwayDot,.scheduledDot{display:inline-block;width:8px;height:8px;border-radius:999px}
+.underwayDot{background:#52d273;box-shadow:0 0 0 2px rgba(82,210,115,.12)}
+.scheduledDot{background:#dce5eb;opacity:.55}
+.underwayLabel{display:inline-block;margin-left:8px;font-size:8px;letter-spacing:.06em;font-weight:800;color:#8fe3a6;vertical-align:middle}
