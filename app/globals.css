@@ -64,18 +64,16 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .scheduledDot{background:#f2f6f8;opacity:.6}
 
 
-/* Operational Learning & Findings Engine v0.2 */
-.insightBadge{display:inline-flex;margin-left:6px;min-width:17px;height:17px;padding:0 5px;align-items:center;justify-content:center;border-radius:999px;background:#c78b2d;color:#fff;font-size:9px;font-weight:800}
+/* AI Insights-only learning view */
 .insightsPage{display:grid;gap:12px}
 .insightMetrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .findingsList{display:grid;gap:9px}
-.finding{border:1px solid var(--line);border-radius:9px;padding:12px;background:#0c1318}
-.finding.RECOMMENDED_CHANGE{border-left:3px solid #dc9b38}
-.finding.CANDIDATE_FINDING{border-left:3px solid #87a9c1}
-.finding.OBSERVATION{border-left:3px solid #586a77}
-.findingHead{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.finding{border:1px solid var(--line);border-left:3px solid #6d8798;border-radius:9px;padding:12px;background:#0c1318}
+.finding.heuristic{border-left-color:#7e9e6f}
+.findingHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .findingHead b{font-size:12px}.findingHead span{font-size:9px;color:#aab6bf}
-.finding p{margin:8px 0 6px;font-size:12px;line-height:1.45;color:#e7edf1}
-.findingMeta{font-size:10px;color:#9baab5}.finding small{display:block;margin-top:6px;color:#71818c}
+.finding p{margin:8px 0;font-size:12px;line-height:1.45;color:#e7edf1}
+.findingSuggestion{font-size:11px;color:#aebbc4;margin-top:6px}
+.finding small{display:block;margin-top:7px;color:#71818c}
 .emptyLearning{padding:16px;font-size:12px;color:#9eacb6}
 @media(max-width:900px){.insightMetrics{grid-template-columns:1fr 1fr}}

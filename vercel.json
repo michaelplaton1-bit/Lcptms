@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/learning-snapshot",
-      "schedule": "0 * * * *"
-    }
-  ]
-}

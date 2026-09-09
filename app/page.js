@@ -76,19 +76,19 @@ function sideToText(m){
 function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
-  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[findings,setFindings]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
+  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
     setLoading(true);setErr("");
     try{
-      const [er,sr,fr]=await Promise.all([
+      const [er,sr,ir]=await Promise.all([
         fetch("/api/environment",{cache:"no-store"}),
         fetch("/api/schedule",{cache:"no-store"}),
-        fetch("/api/learning-findings",{cache:"no-store"})
+        fetch("/api/learning-insights",{cache:"no-store"})
       ]);
-      const [e,s,f]=await Promise.all([er.json(),sr.json(),fr.json()]);
+      const [e,s,i]=await Promise.all([er.json(),sr.json(),ir.json()]);
       if(!er.ok)throw new Error(e?.error||"Unable to load environmental feeds");
       if(!sr.ok)throw new Error(s?.error||"Unable to load schedule");
-      setEnv(e);setSchedule(s);setFindings(fr.ok===false?null:f);
+      setEnv(e);setSchedule(s);setInsights(ir.ok===false?null:i);
     }catch(e){setErr(e.message);}finally{setLoading(false);}
   }
   useEffect(()=>{load();const c=setInterval(()=>setClock(new Date()),30000),r=setInterval(load,60000);return()=>{clearInterval(c);clearInterval(r)}},[]);
@@ -102,10 +102,10 @@ export default function Home(){
       <div className="sidebarFoot"><div className="avatar">LCP</div><div><b>Live read-only</b><span>Structured schedule</span></div></div>
     </aside>
     <main><header className="topbar"><div><h1>Lake Charles Pilots</h1><p>Traffic Management System</p></div><div className="topStats"><div className="topStat"><b>{timeText}</b><span>Lake Charles Local</span></div><div className="topStat"><b><Dot/> Live Schedule</b><span>{schedule?.fetchedAt?"Connected":"Loading"}</span></div><button className="iconBtn" onClick={load}>↻</button></div></header>
-      <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}{x==="AI Insights"&&((findings?.summary?.recommendedChanges||0)+(findings?.summary?.candidateFindings||0)>0)?<span className="insightBadge">{(findings?.summary?.recommendedChanges||0)+(findings?.summary?.candidateFindings||0)}</span>:null}</button>)}</div>
+      <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}</button>)}</div>
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
        tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
-       tab==="AI Insights"?<AIInsights findings={findings}/>:
+       tab==="AI Insights"?<AIInsights insights={insights}/>:
        <Overview env={env} schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
     </main>
@@ -140,24 +140,32 @@ function PilotRow({m,type}){const d=m.display||{},n=m.native||{};return <tr>
   {type==="moving"&&<><td>{n.C6DateTime?fmtDateTime(n.C6DateTime):"—"}</td><td>{n.ICWWDateTime?fmtDateTime(n.ICWWDateTime):"—"}</td><td>{n.OffDock?fmtDateTime(n.OffDock):"—"}</td></>}
   {type==="arriving"&&<td>{n.LastPort||"—"}</td>}<td className="remarksCell">{n.Remarks||d.remarks||"—"}</td><td>{n.LastChange?fmtDateTime(n.LastChange):"—"}</td><td className="aiEta">{d.eta36||d.eta60||d.etaICW||"—"}{d.cameronEffect&&<small>{d.cameronEffect}</small>}</td>
 </tr>}
-function AIInsights({findings}){
-  const list=findings?.findings||[];
-  const s=findings?.summary||{};
+function AIInsights({insights}){
+  const findings=insights?.findings||[];
+  const heuristics=insights?.heuristics||[];
+  const s=insights?.summary||{};
   return <section className="insightsPage">
     <div className="insightMetrics">
-      <Metric n={s.recommendedChanges||0} label="Recommended Changes" sub="Evidence threshold reached"/>
-      <Metric n={s.candidateFindings||0} label="Candidate Findings" sub="Needs more review/data"/>
-      <Metric n={s.observations||0} label="Observations" sub="Being learned quietly"/>
-      <Metric n={findings?.snapshotCount||0} label="Snapshots Analyzed" sub="Recent 12-hour learning window"/>
+      <Metric n={s.liveRecords||0} label="Live Ledger Records" sub="Current schedule state"/>
+      <Metric n={s.moving||0} label="Underway" sub="LCP MOVING section only"/>
+      <Metric n={s.environmentalIntersections||0} label="Env Intersections" sub="Current ETA / Cameron matches"/>
+      <Metric n={s.findings||0} label="Current Findings" sub="Reviewable AI notes"/>
     </div>
-    <Card title="Operational Learning Notes — Past 12 Hours" right={findings?.persistent?"PERSISTENT":"STORAGE NOT CONFIGURED"}>
+
+    <Card title="AI Learning Notes" right="CURRENT SESSION">
       <div className="findingsList">
-        {list.length?list.map(f=><div className={`finding ${f.status}`} key={f.findingId}>
-          <div className="findingHead"><b>{f.type.replaceAll("_"," ")}</b><span>{f.status.replaceAll("_"," ")} · {f.confidence}</span></div>
-          <p>{f.suggestion}</p>
-          <div className="findingMeta">Sample: {f.sampleSize||0}{f.scope?.berth?` · Berth ${f.scope.berth}`:""}{f.scope?.direction?` · ${f.scope.direction}`:""}{f.lastObservedAt?` · Updated ${new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(f.lastObservedAt))}`:""}</div>
-          <small>No system rule is changed automatically.</small>
-        </div>):<div className="emptyLearning">{findings?.message||"No findings in the past 12 hours yet. The system needs repeated snapshots and completed movements before patterns become statistically useful."}</div>}
+        {findings.length?findings.map(f=><div className="finding" key={f.id}>
+          <div className="findingHead"><b>{f.title}</b><span>{f.status} · {f.confidence}</span></div>
+          <p>{f.detail}</p>
+          <div className="findingSuggestion"><b>Suggested system response:</b> {f.suggestion}</div>
+          <small>No operating rule is changed automatically.</small>
+        </div>):<div className="emptyLearning">{insights?.note||"No AI learning notes are available yet."}</div>}
+      </div>
+    </Card>
+
+    <Card title="Human Operational Heuristics" right="LOOSE INFO NOTES">
+      <div className="findingsList">
+        {heuristics.map((h,i)=><div className="finding heuristic" key={i}><div className="findingHead"><b>{h.title}</b><span>HUMAN KNOWLEDGE</span></div><p>{h.detail}</p></div>)}
       </div>
     </Card>
   </section>;
