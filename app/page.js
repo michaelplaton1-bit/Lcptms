@@ -31,18 +31,18 @@ export default function Home() {
     setLoading(true);
     setErr("");
     try {
-      const [envRes, schedRes] = await Promise.all([
+      const [envRes, scheduleRes] = await Promise.all([
         fetch("/api/environment", { cache:"no-store" }),
         fetch("/api/schedule", { cache:"no-store" })
       ]);
 
       const [data, scheduleData] = await Promise.all([
         envRes.json(),
-        schedRes.json()
+        scheduleRes.json()
       ]);
 
       if (!envRes.ok) throw new Error(data?.error || "Unable to load environmental feeds");
-      if (!schedRes.ok) throw new Error(scheduleData?.error || "Unable to load schedule model");
+      if (!scheduleRes.ok) throw new Error(scheduleData?.error || "Unable to load schedule model");
 
       setEnv(data);
       setSchedule(scheduleData);
@@ -130,29 +130,41 @@ export default function Home() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Vessel</th><th>Status</th><th>Draft</th><th>Berth</th>
-                      <th>Ordered</th><th>PBT</th><th>Next Modeled Point</th><th>ETA</th><th>Flags</th>
+                      <th>Vessel</th><th>Dir</th><th>Draft</th><th>Berth</th>
+                      <th>Ordered</th><th>PBT</th><th>Notice</th>
+                      <th>Route Start</th><th>Next Point</th><th>ETA</th><th>Flags</th>
                     </tr>
                   </thead>
                   <tbody>
                     {modeledMoves.length ? modeledMoves.map((m,i) => (
                       <tr key={m.movement?.audit?.sourceRecordId || i}>
                         <td className="vessel">{m.display?.vessel || "—"}</td>
-                        <td>{m.display?.direction || m.display?.status || "—"}</td>
+                        <td>{m.display?.direction || "—"}</td>
                         <td>{m.display?.draftFt != null ? `${m.display.draftFt.toFixed(1)}'` : "—"}</td>
                         <td>{m.display?.berth || "—"}</td>
                         <td>{m.display?.ordered || "—"}</td>
                         <td>{m.display?.pbt || "—"}</td>
-                        <td>{m.display?.nextWaypoint || (m.projection?.reason || "—")}</td>
+                        <td>
+                          {m.display?.noticeRequiredHours != null
+                            ? `${m.display.noticeRequiredHours} HR • ${m.display.noticeStatus || "—"}`
+                            : "TBD"}
+                        </td>
+                        <td>{m.display?.berthAnchor || m.projection?.start?.waypoint || m.display?.berthMapStatus || "—"}</td>
+                        <td>{m.display?.nextWaypoint || m.projection?.reason || "—"}</td>
                         <td>{m.display?.nextEta || "—"}</td>
                         <td>{(m.display?.flags || []).join(", ") || "—"}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="9">Schedule model loading…</td></tr>
+                      <tr><td colSpan="11">Schedule model loading…</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {!!schedule?.unmappedBerths?.length && (
+                <div className="error" style={{marginTop:10}}>
+                  UNMAPPED BERTHS: {schedule.unmappedBerths.join(", ")} — awaiting operational anchor confirmation.
+                </div>
+              )}
             </Card>
 
             <Card title="AI Traffic Recommendation">
