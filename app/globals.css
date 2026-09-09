@@ -39,3 +39,10 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .remarksCell{max-width:280px;overflow:hidden;text-overflow:ellipsis}.aiEta{font-weight:700;color:#d9ecf9}.aiEta small{display:block;color:#9fb1bd;font-size:8px;font-weight:500;margin-top:2px}
 .scheduleNotes{padding:6px 12px 10px}.scheduleNotes>div{padding:7px 0;border-bottom:1px solid #202a32;font-size:11px;line-height:1.35}.scheduleNotes>div:last-child{border-bottom:0}
 @media(max-width:900px){.sheetStatus{grid-template-columns:1fr}.pilotTable{min-width:1400px}}
+
+
+/* Overview live/upcoming traffic: preserve LCP sheet information order */
+.overviewTraffic{min-width:1180px}
+.overviewTraffic th,.overviewTraffic td{white-space:nowrap}
+.overviewTraffic .dimensionsCell{font-variant-numeric:tabular-nums;font-weight:650}
+.overviewTraffic .aiEta{font-weight:700}
