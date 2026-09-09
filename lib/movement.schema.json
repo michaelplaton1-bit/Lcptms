@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LCPTMS Movement Record",
+  "type": "object",
+  "required": [
+    "vessel",
+    "movement",
+    "schedule",
+    "route",
+    "constraints"
+  ],
+  "properties": {
+    "vessel": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loaFt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "beamFt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "dwt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "draftFt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "movement": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "enum": [
+            "INBOUND",
+            "OUTBOUND",
+            "SHIFT",
+            "ANCHORAGE",
+            null
+          ]
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "berth": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "properties": {
+        "orderedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pbtAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actualStartAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "noticeReceivedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "noticeRequiredHours": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lastChangedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "currentWaypoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actualWaypoints": {
+          "type": "object"
+        },
+        "modeledEtas": {
+          "type": "object"
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "berthAvailable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "deepDraftWindowRequired": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "deepDraftWindowSatisfied": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "environmental": {
+          "type": "array"
+        },
+        "traffic": {
+          "type": "array"
+        },
+        "standardsOfCare": {
+          "type": "array"
+        },
+        "pilotDiscretion": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
