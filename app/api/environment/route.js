@@ -296,19 +296,37 @@ function compass16(deg) {
 
 function formatLocalObservationTime(value) {
   if (!value) return "—";
+
+  const str = String(value).trim();
   let ms;
-  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(String(value))) {
-    ms=parseNoaaLocalTimeMs(String(value).slice(0,16));
+
+  // ISO-8601 timestamps with explicit timezone information (Z or ±HH:MM)
+  // must be parsed as absolute instants. This is how NWS timestamps arrive.
+  const hasExplicitZone =
+    /Z$/i.test(str) ||
+    /[+-]\d{2}:\d{2}$/.test(str);
+
+  if (hasExplicitZone) {
+    ms = new Date(str).getTime();
+  } else if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(str)) {
+    // NOAA LST/LDT timestamps arrive without an explicit offset.
+    ms = parseNoaaLocalTimeMs(str.slice(0,16));
   } else {
-    ms=new Date(value).getTime();
+    ms = new Date(str).getTime();
   }
+
   if (!Number.isFinite(ms)) return "—";
-  const parts=new Intl.DateTimeFormat("en-US",{
-    timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit",
-    hourCycle:"h23",timeZoneName:"short"
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "short"
   }).formatToParts(new Date(ms));
-  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
-  return `${p.hour}${p.minute} ${p.timeZoneName||"CT"}`;
+
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+  return `${p.hour}${p.minute} ${p.timeZoneName || "CT"}`;
 }
 
 async function noaaWind(station="8768094") {
@@ -609,7 +627,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.8.2",
+    schemaVersion: "0.8.3",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
