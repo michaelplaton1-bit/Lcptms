@@ -180,6 +180,46 @@ function parsePredictionRow(row) {
   };
 }
 
+function extractPredictionRows(j) {
+  const candidates = [
+    j?.current_predictions,
+    j?.predictions,
+    j?.data,
+    j?.currentPredictions,
+    j?.current_predictions?.cp,
+    j?.current_predictions?.predictions,
+    j?.current_predictions?.data,
+    j?.predictions?.cp,
+    j?.predictions?.predictions,
+    j?.predictions?.data
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return {
+        rows: candidate,
+        shape: "array"
+      };
+    }
+
+    if (candidate && typeof candidate === "object") {
+      for (const [key, value] of Object.entries(candidate)) {
+        if (Array.isArray(value)) {
+          return {
+            rows: value,
+            shape: `object.${key}`
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    rows: [],
+    shape: j && typeof j === "object" ? `unrecognized:${Object.keys(j).join(",")}` : typeof j
+  };
+}
+
 async function noaaCurrentPredictions(station, bin, hours = 8) {
   const u = new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
   u.searchParams.set("begin_date", chicagoDateTime());
@@ -197,8 +237,13 @@ async function noaaCurrentPredictions(station, bin, hours = 8) {
   const j = await getJson(u.toString());
   if (j.error) throw new Error(j.error.message || "NOAA prediction error");
 
-  const rows = j.current_predictions || j.predictions || j.data || [];
-  return rows.map(parsePredictionRow);
+  const extracted = extractPredictionRows(j);
+
+  return {
+    rows: extracted.rows.map(parsePredictionRow),
+    responseShape: extracted.shape,
+    topLevelKeys: j && typeof j === "object" ? Object.keys(j) : []
+  };
 }
 
 async function noaaPortsCurrentStates() {
@@ -353,7 +398,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.5.0",
+    schemaVersion: "0.6.0",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
@@ -384,7 +429,8 @@ export async function GET() {
   const camObs = camObsRes.status === "fulfilled" ? camObsRes.value : null;
   const lb36Hist = lb36HistRes.status === "fulfilled" ? lb36HistRes.value : [];
   const camHist = camHistRes.status === "fulfilled" ? camHistRes.value : [];
-  const camPred = camPredRes.status === "fulfilled" ? camPredRes.value : [];
+  const camPredPayload = camPredRes.status === "fulfilled" ? camPredRes.value : { rows: [], responseShape: "error", topLevelKeys: [] };
+  const camPred = Array.isArray(camPredPayload.rows) ? camPredPayload.rows : [];
   const portsState = portsStateRes.status === "fulfilled" ? portsStateRes.value : {};
 
   const lb36ObservedPhase = portsState?.lb36?.phase || null;
@@ -465,6 +511,8 @@ export async function GET() {
               : `${deviationKt >= 0 ? "+" : ""}${deviationKt.toFixed(2)} kt actual vs prediction`,
           trend: trendFromHistory(camHist),
           forecastHours: 8,
+          predictionResponseShape: camPredPayload.responseShape,
+          predictionResponseTopLevelKeys: camPredPayload.topLevelKeys,
           forecastModel: {
             observationStation: "lc0201",
             observationBin: 30,
@@ -539,7 +587,15 @@ export async function GET() {
         supported: false,
         note: "LB36 cross current is live observation only; no prediction requested"
       },
-      cameronPrediction: buildDiagnostic(camPredRes),
+      cameronPrediction:
+        camPredRes.status === "fulfilled"
+          ? {
+              ok: true,
+              responseShape: camPredPayload.responseShape,
+              topLevelKeys: camPredPayload.topLevelKeys,
+              points: camPred.length
+            }
+          : buildDiagnostic(camPredRes),
       portsFloodEbbState: buildDiagnostic(portsStateRes),
       waterLevel: buildDiagnostic(waterRes)
     },
