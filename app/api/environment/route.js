@@ -357,25 +357,121 @@ async function noaaWaterLevel() {
   };
 }
 
-async function nwsObservation() {
-  const j=await getJson("https://api.weather.gov/stations/KLCH/observations/latest",{
-    Accept:"application/geo+json","User-Agent":"LCPTMS/0.8 operations@lcptms.com"
-  });
-  const p=j.properties||{};
-  const ms=p.windSpeed?.value, gustMs=p.windGust?.value, deg=p.windDirection?.value;
-  const meters=p.visibility?.value;
-  const kt=ms==null?null:ms*1.94384, gustKt=gustMs==null?null:gustMs*1.94384;
-  const nm=meters==null?null:meters/1852, directionText=compass16(deg);
+
+function speedToKnots(value, unitCode) {
+  const v = num(value);
+  if (v == null) {
+    return { knots: null, rawValue: value ?? null, rawUnit: unitCode ?? null, conversion: "missing" };
+  }
+
+  const u = String(unitCode || "").toLowerCase();
+
+  if (u.includes("m_s-1") || u.includes("m/s")) {
+    return {
+      knots: v * 1.9438444924406,
+      rawValue: v,
+      rawUnit: unitCode,
+      conversion: "m/s -> kt"
+    };
+  }
+
+  if (u.includes("km_h-1") || u.includes("km/h")) {
+    return {
+      knots: v / 1.852,
+      rawValue: v,
+      rawUnit: unitCode,
+      conversion: "km/h -> kt"
+    };
+  }
+
+  if (u.includes("kt") || u.includes("knot")) {
+    return {
+      knots: v,
+      rawValue: v,
+      rawUnit: unitCode,
+      conversion: "kt -> kt"
+    };
+  }
+
+  if (u.includes("mi_h-1") || u.includes("mph")) {
+    return {
+      knots: v * 0.86897624190065,
+      rawValue: v,
+      rawUnit: unitCode,
+      conversion: "mph -> kt"
+    };
+  }
+
   return {
-    station:"KLCH",stationName:"Lake Charles Regional Airport",
-    wind:{
-      valueKt:kt,gustKt,direction:deg,directionText,observedAt:p.timestamp,
-      observedLocal:formatLocalObservationTime(p.timestamp),
-      display:kt==null?"Unavailable":
-        `${directionText} ${kt.toFixed(0)} kt${gustKt!=null?` G${gustKt.toFixed(0)}`:""}`
+    knots: null,
+    rawValue: v,
+    rawUnit: unitCode ?? null,
+    conversion: "unsupported unit"
+  };
+}
+
+async function nwsObservation() {
+  const j = await getJson(
+    "https://api.weather.gov/stations/KLCH/observations/latest",
+    {
+      Accept: "application/geo+json",
+      "User-Agent": "LCPTMS/0.8.1 operations@lcptms.com"
+    }
+  );
+
+  const p = j.properties || {};
+
+  const windConv = speedToKnots(
+    p.windSpeed?.value,
+    p.windSpeed?.unitCode
+  );
+
+  const gustConv = speedToKnots(
+    p.windGust?.value,
+    p.windGust?.unitCode
+  );
+
+  const deg = p.windDirection?.value;
+  const meters = p.visibility?.value;
+  const nm = meters == null ? null : meters / 1852;
+  const directionText = compass16(deg);
+
+  return {
+    station: "KLCH",
+    stationName: "Lake Charles Regional Airport",
+
+    wind: {
+      valueKt: windConv.knots,
+      gustKt: gustConv.knots,
+      direction: deg,
+      directionText,
+      observedAt: p.timestamp,
+      observedLocal: formatLocalObservationTime(p.timestamp),
+
+      raw: {
+        speedValue: windConv.rawValue,
+        speedUnitCode: windConv.rawUnit,
+        speedConversion: windConv.conversion,
+        gustValue: gustConv.rawValue,
+        gustUnitCode: gustConv.rawUnit,
+        gustConversion: gustConv.conversion
+      },
+
+      display:
+        windConv.knots == null
+          ? "Unavailable"
+          : `${directionText} ${windConv.knots.toFixed(0)} kt${
+              gustConv.knots != null ? ` G${gustConv.knots.toFixed(0)}` : ""
+            }`
     },
-    visibility:{valueNm:nm,display:nm==null?"Unavailable":`${nm.toFixed(1)} NM`},
-    timestamp:p.timestamp,observedLocal:formatLocalObservationTime(p.timestamp)
+
+    visibility: {
+      valueNm: nm,
+      display: nm == null ? "Unavailable" : `${nm.toFixed(1)} NM`
+    },
+
+    timestamp: p.timestamp,
+    observedLocal: formatLocalObservationTime(p.timestamp)
   };
 }
 
@@ -509,7 +605,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.8.0",
+    schemaVersion: "0.8.1",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
