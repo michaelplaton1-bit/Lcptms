@@ -14,11 +14,28 @@ const num = (x) => {
 
 async function getJson(url, headers = {}) {
   const r = await fetch(url, { headers, cache: "no-store" });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return await r.json();
+  const text = await r.text();
+
+  if (!r.ok) {
+    throw new Error(`${r.status} ${r.statusText}: ${text.slice(0, 300)}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid JSON response: ${text.slice(0, 300)}`);
+  }
 }
 
-function chicagoNowParts() {
+async function getText(url, headers = {}) {
+  const r = await fetch(url, { headers, cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${text.slice(0, 300)}`);
+  return text;
+}
+
+function chicagoDateTime(offsetMinutes = 0) {
+  const d = new Date(Date.now() + offsetMinutes * 60000);
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
     year: "numeric",
@@ -27,49 +44,23 @@ function chicagoNowParts() {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23"
-  }).formatToParts(new Date());
-
+  }).formatToParts(d);
   const o = Object.fromEntries(parts.map(p => [p.type, p.value]));
-  return { api: `${o.year}${o.month}${o.day} ${o.hour}:${o.minute}` };
+  return `${o.year}${o.month}${o.day} ${o.hour}:${o.minute}`;
 }
 
-function angleDiff(a, b) {
-  if (a == null || b == null) return null;
-  return Math.abs((((a - b) % 360) + 540) % 360 - 180);
-}
-
-function nearestTidalPhase(direction, meanFloodDir, meanEbbDir) {
-  if (direction == null || meanFloodDir == null || meanEbbDir == null) {
-    return { phase: "UNKNOWN", confidence: null };
+function trendFromHistory(points) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return { label: "Unknown", deltaKtPerHour: null };
   }
-  const f = angleDiff(direction, meanFloodDir);
-  const e = angleDiff(direction, meanEbbDir);
-  return {
-    phase: e < f ? "EBB" : "FLOOD",
-    confidence: Math.min(1, Math.abs(f - e) / 90),
-    angleToFlood: f,
-    angleToEbb: e
-  };
-}
 
-function operationalEffect(phase, vesselDirection) {
-  if (phase === "UNKNOWN" || phase === "SLACK") return phase;
-  if (vesselDirection === "INBOUND") {
-    return phase === "FLOOD" ? "FOLLOWING" : "OPPOSING";
-  }
-  if (vesselDirection === "OUTBOUND") {
-    return phase === "FLOOD" ? "OPPOSING" : "FOLLOWING";
-  }
-  return "UNKNOWN";
-}
-
-function trendFromSeries(points) {
   const valid = points.filter(p => Number.isFinite(p.speed));
   if (valid.length < 2) return { label: "Unknown", deltaKtPerHour: null };
+
   const a = valid[Math.max(0, valid.length - 6)];
   const b = valid[valid.length - 1];
 
-  const parseLocal = (s) => new Date(String(s).replace(" ", "T"));
+  const parseLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
   const hours = Math.max((parseLocal(b.time) - parseLocal(a.time)) / 3600000, 0.01);
   const delta = (b.speed - a.speed) / hours;
 
@@ -79,11 +70,43 @@ function trendFromSeries(points) {
   };
 }
 
-async function noaaCurrentObservation(station, bin, rangeHours = 2) {
-  const now = chicagoNowParts();
+function lb36SetFromDirection(directionDeg) {
+  if (!Number.isFinite(directionDeg)) return "UNKNOWN";
+
+  // NOAA current direction is the direction TOWARD which the current flows.
+  // Use the E/W vector component for the cross-channel operational label.
+  const eastComponent = Math.sin(directionDeg * Math.PI / 180);
+
+  if (Math.abs(eastComponent) < 0.10) return "TRANSITION";
+  return eastComponent < 0 ? "WESTERLY" : "EASTERLY";
+}
+
+function cameronPhaseFromDirection(directionDeg) {
+  if (!Number.isFinite(directionDeg)) return "UNKNOWN";
+
+  // Cameron channel is predominantly N/S.
+  // Northward current = FLOOD (up-river); southward = EBB (down-river).
+  const northComponent = Math.cos(directionDeg * Math.PI / 180);
+
+  if (Math.abs(northComponent) < 0.15) return "TRANSITION";
+  return northComponent > 0 ? "FLOOD" : "EBB";
+}
+
+function operationalEffect(phase, vesselDirection) {
+  if (!["FLOOD", "EBB"].includes(phase)) return phase;
+
+  if (vesselDirection === "INBOUND") {
+    return phase === "FLOOD" ? "FOLLOWING" : "OPPOSING";
+  }
+  if (vesselDirection === "OUTBOUND") {
+    return phase === "FLOOD" ? "OPPOSING" : "FOLLOWING";
+  }
+  return "UNKNOWN";
+}
+
+async function noaaLatestCurrent(station, bin) {
   const u = new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
-  u.searchParams.set("begin_date", now.api);
-  u.searchParams.set("range", String(rangeHours));
+  u.searchParams.set("date", "latest");
   u.searchParams.set("station", station);
   u.searchParams.set("product", "currents");
   u.searchParams.set("bin", String(bin));
@@ -95,85 +118,75 @@ async function noaaCurrentObservation(station, bin, rangeHours = 2) {
   const j = await getJson(u.toString());
   if (j.error) throw new Error(j.error.message || "NOAA current error");
 
-  const history = (j.data || []).map(row => ({
+  const row = (j.data || []).at(-1);
+  if (!row) throw new Error("No NOAA current observation");
+
+  return {
+    time: row.t,
+    speed: num(row.s),
+    direction: num(row.d)
+  };
+}
+
+async function noaaCurrentHistory(station, bin, hours = 2) {
+  const u = new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
+  u.searchParams.set("end_date", chicagoDateTime());
+  u.searchParams.set("range", String(hours));
+  u.searchParams.set("station", station);
+  u.searchParams.set("product", "currents");
+  u.searchParams.set("bin", String(bin));
+  u.searchParams.set("time_zone", "lst_ldt");
+  u.searchParams.set("units", "english");
+  u.searchParams.set("format", "json");
+  u.searchParams.set("application", "LCPTMS");
+
+  const j = await getJson(u.toString());
+  if (j.error) throw new Error(j.error.message || "NOAA history error");
+
+  return (j.data || []).map(row => ({
     time: row.t,
     speed: num(row.s),
     direction: num(row.d)
   })).filter(x => x.speed != null);
-
-  const latest = history.at(-1);
-  if (!latest) throw new Error("No NOAA current observation");
-  return { latest, history };
 }
 
-async function noaaStationMetadata(station) {
-  const attempts = [
-    `https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/${station}.json?expand=currentprediction,currentpredictionoffsets`,
-    `https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/${station}.json?expand=currentprediction`,
-    `https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/${station}.json`
-  ];
-
-  let lastErr;
-  for (const url of attempts) {
-    try {
-      const j = await getJson(url);
-      const cp = j.currentprediction || j.currentPrediction || j.currentPredictions || j;
-      const first = Array.isArray(cp) ? cp[0] : cp;
-      const offsets =
-        j.currentpredictionoffsets ||
-        j.currentPredictionOffsets ||
-        first?.currentpredictionoffsets ||
-        first?.currentPredictionOffsets ||
-        null;
-      const off = Array.isArray(offsets) ? offsets[0] : offsets;
-
-      return {
-        id: station,
-        name: first?.name || j?.name || station,
-        currbin: num(first?.currbin) ?? num(first?.bin) ?? num(off?.refStationBin),
-        predictionType: first?.type || null,
-        depth: num(first?.depth),
-        depthType: first?.depthType || null,
-        meanFloodDir: num(off?.meanFloodDir) ?? num(first?.meanFloodDir),
-        meanEbbDir: num(off?.meanEbbDir) ?? num(first?.meanEbbDir)
-      };
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error("NOAA metadata unavailable");
-}
-
-function parsePredictionRow(row, metadata) {
+function parsePredictionRow(row) {
   const major =
     num(row.Velocity_Major) ??
     num(row.velocity_major) ??
     num(row.v) ??
     num(row.velocity);
 
-  const speed = Math.abs(major ?? num(row.Speed) ?? num(row.s) ?? 0);
-  const phase = major == null ? "UNKNOWN" : major < 0 ? "EBB" : major > 0 ? "FLOOD" : "SLACK";
+  const speed = Math.abs(
+    major ??
+    num(row.Speed) ??
+    num(row.speed) ??
+    num(row.s) ??
+    0
+  );
+
+  let phase = "UNKNOWN";
+  if (major != null) {
+    phase = major < 0 ? "EBB" : major > 0 ? "FLOOD" : "SLACK";
+  }
 
   return {
     time: row.Time || row.t || row.time,
     velocityMajor: major,
     speed,
     phase,
-    direction:
-      phase === "EBB" ? metadata?.meanEbbDir :
-      phase === "FLOOD" ? metadata?.meanFloodDir :
-      null
+    meanFloodDir: num(row.meanFloodDir ?? row.Mean_Flood_Direction),
+    meanEbbDir: num(row.meanEbbDir ?? row.Mean_Ebb_Direction)
   };
 }
 
-async function noaaCurrentPredictions(station, bin, metadata, hours = 12) {
-  const now = chicagoNowParts();
+async function noaaCurrentPredictions(station, bin, hours = 8) {
   const u = new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
-  u.searchParams.set("begin_date", now.api);
+  u.searchParams.set("begin_date", chicagoDateTime());
   u.searchParams.set("range", String(hours));
   u.searchParams.set("station", station);
   u.searchParams.set("product", "currents_predictions");
-  if (bin != null) u.searchParams.set("bin", String(bin));
+  u.searchParams.set("bin", String(bin));
   u.searchParams.set("time_zone", "lst_ldt");
   u.searchParams.set("interval", "30");
   u.searchParams.set("units", "english");
@@ -185,72 +198,47 @@ async function noaaCurrentPredictions(station, bin, metadata, hours = 12) {
   if (j.error) throw new Error(j.error.message || "NOAA prediction error");
 
   const rows = j.current_predictions || j.predictions || j.data || [];
-  return rows.map(row => parsePredictionRow(row, metadata));
+  return rows.map(parsePredictionRow);
 }
 
-function build36Operational(obs, metadata, predictions) {
-  const phaseInfo = nearestTidalPhase(
-    obs.latest.direction,
-    metadata?.meanFloodDir,
-    metadata?.meanEbbDir
-  );
+async function noaaPortsCurrentStates() {
+  // NOAA's text PORTS screen explicitly labels real-time current as
+  // (F)lood, (S)lack, or (E)bb. This is used as an authoritative
+  // observed-state label when parseable, while the Data API remains
+  // the source for velocity/direction.
+  const html = await getText("https://tidesandcurrents.noaa.gov/ports/textscreen.shtml?port=lc");
 
-  const set =
-    phaseInfo.phase === "EBB" ? "WESTERLY" :
-    phaseInfo.phase === "FLOOD" ? "EASTERLY" :
-    "UNKNOWN";
+  const flat = html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&deg;?/gi, "°")
+    .replace(/\s+/g, " ");
 
-  return {
-    crossCurrentKt: obs.latest.speed,
-    set,
-    phase: phaseInfo.phase,
-    display: `${obs.latest.speed.toFixed(2)} kt ${set.toLowerCase()} set`,
-    rawDirectionDeg: obs.latest.direction,
-    observedAt: obs.latest.time,
-    trend: trendFromSeries(obs.history),
-    classification: {
-      method: "Observed direction vs NOAA mean ebb/flood directions",
-      ...phaseInfo
-    },
-    prediction: predictions.map(p => ({
-      ...p,
-      set:
-        p.phase === "EBB" ? "WESTERLY" :
-        p.phase === "FLOOD" ? "EASTERLY" :
-        p.phase
-    }))
-  };
-}
+  function find(labelFragments) {
+    for (const label of labelFragments) {
+      const idx = flat.toLowerCase().indexOf(label.toLowerCase());
+      if (idx < 0) continue;
 
-function buildCameronOperational(obs, metadata, predictions) {
-  const phaseInfo = nearestTidalPhase(
-    obs.latest.direction,
-    metadata?.meanFloodDir,
-    metadata?.meanEbbDir
-  );
-  const phase = phaseInfo.phase;
-
-  return {
-    actual: {
-      speedKt: obs.latest.speed,
-      phase,
-      observedAt: obs.latest.time,
-      rawDirectionDeg: obs.latest.direction,
-      inboundEffect: operationalEffect(phase, "INBOUND"),
-      outboundEffect: operationalEffect(phase, "OUTBOUND"),
-      display: `${obs.latest.speed.toFixed(2)} kt ${phase.toLowerCase()}`
-    },
-    trend: trendFromSeries(obs.history),
-    forecastHours: 12,
-    prediction: predictions.map(p => ({
-      ...p,
-      inboundEffect: operationalEffect(p.phase, "INBOUND"),
-      outboundEffect: operationalEffect(p.phase, "OUTBOUND")
-    })),
-    classification: {
-      method: "Observed direction vs NOAA mean ebb/flood directions",
-      ...phaseInfo
+      const chunk = flat.slice(idx, idx + 180);
+      const m = chunk.match(/([0-9.]+)\s*kn\s*\(([FES])\)\s*,?\s*([0-9.]+)°/i);
+      if (m) {
+        return {
+          speedKt: Number(m[1]),
+          phaseCode: m[2].toUpperCase(),
+          phase:
+            m[2].toUpperCase() === "F" ? "FLOOD" :
+            m[2].toUpperCase() === "E" ? "EBB" :
+            "SLACK",
+          direction: Number(m[3])
+        };
+      }
     }
+    return null;
+  }
+
+  return {
+    lb36: find(["LB 36 Calcasieu Ch", "LB 36 Calcasieu"]),
+    cameron: find(["Cameron Fishing Pier"])
   };
 }
 
@@ -268,7 +256,12 @@ async function noaaWaterLevel() {
   const j = await getJson(u.toString());
   const row = (j.data || []).at(-1);
   if (!row) throw new Error("No NOAA water-level observation");
-  return { value: num(row.v), time: row.t, display: `${num(row.v).toFixed(2)} ft MLLW` };
+
+  return {
+    value: num(row.v),
+    time: row.t,
+    display: `${num(row.v).toFixed(2)} ft MLLW`
+  };
 }
 
 async function nwsObservation() {
@@ -276,13 +269,15 @@ async function nwsObservation() {
     "https://api.weather.gov/stations/KLCH/observations/latest",
     {
       Accept: "application/geo+json",
-      "User-Agent": "LCPTMS/0.2 operations@lcptms.com"
+      "User-Agent": "LCPTMS/0.4 operations@lcptms.com"
     }
   );
+
   const p = j.properties || {};
   const ms = p.windSpeed?.value;
   const deg = p.windDirection?.value;
   const meters = p.visibility?.value;
+
   const kt = ms == null ? null : ms * 1.94384;
   const nm = meters == null ? null : meters / 1852;
 
@@ -290,7 +285,10 @@ async function nwsObservation() {
     wind: {
       valueKt: kt,
       direction: deg,
-      display: kt == null ? "Unavailable" : `${kt.toFixed(0)} kt @ ${deg == null ? "—" : Math.round(deg) + "°"}`
+      display:
+        kt == null
+          ? "Unavailable"
+          : `${kt.toFixed(0)} kt @ ${deg == null ? "—" : Math.round(deg) + "°"}`
     },
     visibility: {
       valueNm: nm,
@@ -307,7 +305,10 @@ async function nhcStatus() {
     return {
       count: storms.length,
       storms,
-      display: storms.length ? `${storms.length} active system${storms.length > 1 ? "s" : ""}` : "No active systems"
+      display:
+        storms.length
+          ? `${storms.length} active system${storms.length > 1 ? "s" : ""}`
+          : "No active systems"
     };
   } catch {
     return { count: null, storms: [], display: "Feed check required" };
@@ -321,106 +322,192 @@ async function stormGeoStatus() {
   return { configured: true, display: "Configured — endpoint mapping next" };
 }
 
+function buildDiagnostic(settledResult) {
+  return settledResult.status === "fulfilled"
+    ? { ok: true }
+    : { ok: false, error: String(settledResult.reason?.message || settledResult.reason || "Unknown error") };
+}
+
 export async function GET() {
   const result = {
-    sources: {},
+    schemaVersion: "0.4.0",
     generatedAt: new Date().toISOString(),
-    schemaVersion: "0.3.0"
+    sources: {},
+    diagnostics: {}
   };
-
-  const [meta36Res, metaCamRes] = await Promise.allSettled([
-    noaaStationMetadata("lc0101"),
-    noaaStationMetadata("lc0201")
-  ]);
-
-  const meta36 = meta36Res.status === "fulfilled"
-    ? meta36Res.value
-    : { id: "lc0101", currbin: 1, meanFloodDir: null, meanEbbDir: null };
-
-  const metaCam = metaCamRes.status === "fulfilled"
-    ? metaCamRes.value
-    : { id: "lc0201", currbin: 30, meanFloodDir: null, meanEbbDir: null };
-
-  const bin36 = meta36.currbin ?? 1;
-  const binCam = metaCam.currbin ?? 30;
 
   const tasks = await Promise.allSettled([
-    noaaCurrentObservation("lc0101", bin36, 2),
-    noaaCurrentObservation("lc0201", binCam, 2),
-    noaaCurrentPredictions("lc0101", bin36, meta36, 12),
-    noaaCurrentPredictions("lc0201", binCam, metaCam, 12),
-    noaaWaterLevel(),
-    nwsObservation(),
-    nhcStatus(),
-    stormGeoStatus()
+    noaaLatestCurrent("lc0101", 1),      // 0
+    noaaLatestCurrent("lc0201", 30),     // 1
+    noaaCurrentHistory("lc0101", 1, 2),  // 2
+    noaaCurrentHistory("lc0201", 30, 2), // 3
+    noaaCurrentPredictions("lc0101", 1, 8),  // 4
+    noaaCurrentPredictions("lc0201", 30, 8), // 5
+    noaaPortsCurrentStates(),            // 6
+    noaaWaterLevel(),                    // 7
+    nwsObservation(),                    // 8
+    nhcStatus(),                         // 9
+    stormGeoStatus()                     // 10
   ]);
 
-  const [obs36Res, obsCamRes, pred36Res, predCamRes, waterRes, nwsRes, nhcRes, stormRes] = tasks;
+  const [
+    lb36ObsRes, camObsRes,
+    lb36HistRes, camHistRes,
+    lb36PredRes, camPredRes,
+    portsStateRes,
+    waterRes, nwsRes, nhcRes, stormRes
+  ] = tasks;
 
-  const obs36 = obs36Res.status === "fulfilled" ? obs36Res.value : null;
-  const obsCam = obsCamRes.status === "fulfilled" ? obsCamRes.value : null;
-  const pred36 = pred36Res.status === "fulfilled" ? pred36Res.value : [];
-  const predCam = predCamRes.status === "fulfilled" ? predCamRes.value : [];
+  const lb36Obs = lb36ObsRes.status === "fulfilled" ? lb36ObsRes.value : null;
+  const camObs = camObsRes.status === "fulfilled" ? camObsRes.value : null;
+  const lb36Hist = lb36HistRes.status === "fulfilled" ? lb36HistRes.value : [];
+  const camHist = camHistRes.status === "fulfilled" ? camHistRes.value : [];
+  const lb36Pred = lb36PredRes.status === "fulfilled" ? lb36PredRes.value : [];
+  const camPred = camPredRes.status === "fulfilled" ? camPredRes.value : [];
+  const portsState = portsStateRes.status === "fulfilled" ? portsStateRes.value : {};
+
+  const lb36ObservedPhase = portsState?.lb36?.phase || null;
+  const camObservedPhase = portsState?.cameron?.phase || null;
+
+  // 36 Buoy operational convention:
+  // EBB on the NOAA cross-current meter = WESTERLY set.
+  // FLOOD = EASTERLY set.
+  const lb36FallbackSet = lb36Obs ? lb36SetFromDirection(lb36Obs.direction) : "UNKNOWN";
+  const lb36Set =
+    lb36ObservedPhase === "EBB" ? "WESTERLY" :
+    lb36ObservedPhase === "FLOOD" ? "EASTERLY" :
+    lb36ObservedPhase === "SLACK" ? "SLACK" :
+    lb36FallbackSet;
+
+  // Cameron operational convention:
+  // NOAA FLOOD/EBB label is preferred. Direction-based classification is fallback.
+  const camPhase =
+    camObservedPhase ||
+    (camObs ? cameronPhaseFromDirection(camObs.direction) : "UNKNOWN");
 
   result.noaa = {
-    metadata: { lb36: meta36, cameron: metaCam },
     raw: {
-      lb36: obs36?.latest || null,
-      cameron: obsCam?.latest || null
+      lb36: lb36Obs,
+      cameron: camObs
     },
+
     operational: {
-      lb36: obs36
-        ? build36Operational(obs36, meta36, pred36)
-        : { display: "Unavailable", prediction: [] },
-      cameron: obsCam
-        ? buildCameronOperational(obsCam, metaCam, predCam)
-        : { actual: { display: "Unavailable" }, prediction: [] }
+      lb36: lb36Obs ? {
+        crossCurrentKt: lb36Obs.speed,
+        set: lb36Set,
+        phase: lb36ObservedPhase || "DERIVED",
+        observedAt: lb36Obs.time,
+        rawDirectionDeg: lb36Obs.direction,
+        display:
+          lb36Set === "SLACK"
+            ? `${lb36Obs.speed.toFixed(2)} kt slack`
+            : `${lb36Obs.speed.toFixed(2)} kt ${lb36Set.toLowerCase()} set`,
+        trend: trendFromHistory(lb36Hist),
+        observedStateSource:
+          lb36ObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback",
+        prediction: lb36Pred.map(p => ({
+          ...p,
+          set:
+            p.phase === "EBB" ? "WESTERLY" :
+            p.phase === "FLOOD" ? "EASTERLY" :
+            p.phase
+        }))
+      } : {
+        display: "Unavailable",
+        prediction: []
+      },
+
+      cameron: camObs ? {
+        actual: {
+          speedKt: camObs.speed,
+          phase: camPhase,
+          observedAt: camObs.time,
+          rawDirectionDeg: camObs.direction,
+          inboundEffect: operationalEffect(camPhase, "INBOUND"),
+          outboundEffect: operationalEffect(camPhase, "OUTBOUND"),
+          display: `${camObs.speed.toFixed(2)} kt ${String(camPhase).toLowerCase()}`
+        },
+        trend: trendFromHistory(camHist),
+        forecastHours: 8,
+        observedStateSource:
+          camObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback",
+        prediction: camPred.map(p => ({
+          ...p,
+          inboundEffect: operationalEffect(p.phase, "INBOUND"),
+          outboundEffect: operationalEffect(p.phase, "OUTBOUND")
+        }))
+      } : {
+        actual: { display: "Unavailable" },
+        forecastHours: 8,
+        prediction: []
+      }
     },
-    waterLevel: waterRes.status === "fulfilled"
-      ? waterRes.value
-      : { display: "Unavailable" }
+
+    portsState: portsState || {},
+
+    waterLevel:
+      waterRes.status === "fulfilled"
+        ? waterRes.value
+        : { display: "Unavailable" }
   };
 
-  // Backward compatibility with current dashboard.
-  result.noaa.lb36 = obs36
-    ? {
-        speed: obs36.latest.speed,
-        direction: obs36.latest.direction,
-        time: obs36.latest.time,
-        display: result.noaa.operational.lb36.display
-      }
-    : { display: "Unavailable" };
+  // Backward-compatible fields for existing dashboard.
+  result.noaa.lb36 = lb36Obs ? {
+    speed: lb36Obs.speed,
+    direction: lb36Obs.direction,
+    time: lb36Obs.time,
+    display: result.noaa.operational.lb36.display
+  } : { display: "Unavailable" };
 
-  result.noaa.cameron = obsCam
-    ? {
-        speed: obsCam.latest.speed,
-        direction: obsCam.latest.direction,
-        time: obsCam.latest.time,
-        display: result.noaa.operational.cameron.actual.display
-      }
-    : { display: "Unavailable" };
+  result.noaa.cameron = camObs ? {
+    speed: camObs.speed,
+    direction: camObs.direction,
+    time: camObs.time,
+    display: result.noaa.operational.cameron.actual.display
+  } : { display: "Unavailable" };
 
-  result.nws = nwsRes.status === "fulfilled"
-    ? nwsRes.value
-    : {
-        wind: { display: "Unavailable" },
-        visibility: { display: "Unavailable" }
-      };
+  result.nws =
+    nwsRes.status === "fulfilled"
+      ? nwsRes.value
+      : {
+          wind: { display: "Unavailable" },
+          visibility: { display: "Unavailable" }
+        };
 
-  result.nhc = nhcRes.status === "fulfilled"
-    ? nhcRes.value
-    : { display: "Unavailable" };
+  result.nhc =
+    nhcRes.status === "fulfilled"
+      ? nhcRes.value
+      : { display: "Unavailable" };
 
-  result.stormgeo = stormRes.status === "fulfilled"
-    ? stormRes.value
-    : { configured: false, display: "Unavailable" };
+  result.stormgeo =
+    stormRes.status === "fulfilled"
+      ? stormRes.value
+      : { configured: false, display: "Unavailable" };
 
-  result.sources.noaa = !!obs36 || !!obsCam || waterRes.status === "fulfilled";
-  result.sources.noaaPredictions = pred36.length > 0 || predCam.length > 0;
-  result.sources.noaaMetadata = meta36Res.status === "fulfilled" || metaCamRes.status === "fulfilled";
-  result.sources.nws = nwsRes.status === "fulfilled";
-  result.sources.nhc = nhcRes.status === "fulfilled";
-  result.sources.stormgeo = !!result.stormgeo.configured;
+  result.diagnostics = {
+    noaa: {
+      lb36Observation: buildDiagnostic(lb36ObsRes),
+      cameronObservation: buildDiagnostic(camObsRes),
+      lb36History: buildDiagnostic(lb36HistRes),
+      cameronHistory: buildDiagnostic(camHistRes),
+      lb36Prediction: buildDiagnostic(lb36PredRes),
+      cameronPrediction: buildDiagnostic(camPredRes),
+      portsFloodEbbState: buildDiagnostic(portsStateRes),
+      waterLevel: buildDiagnostic(waterRes)
+    },
+    nws: buildDiagnostic(nwsRes),
+    nhc: buildDiagnostic(nhcRes),
+    stormgeo: buildDiagnostic(stormRes)
+  };
+
+  result.sources = {
+    noaa: !!lb36Obs || !!camObs || waterRes.status === "fulfilled",
+    noaaPredictions: lb36Pred.length > 0 || camPred.length > 0,
+    noaaPortsState: !!portsState?.lb36 || !!portsState?.cameron,
+    nws: nwsRes.status === "fulfilled",
+    nhc: nhcRes.status === "fulfilled",
+    stormgeo: !!result.stormgeo.configured
+  };
 
   return json(result);
 }
