@@ -287,6 +287,54 @@ async function noaaPortsCurrentStates() {
   };
 }
 
+
+function compass16(deg) {
+  if (!Number.isFinite(deg)) return "—";
+  const p=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return p[Math.round((((deg%360)+360)%360)/22.5)%16];
+}
+
+function formatLocalObservationTime(value) {
+  if (!value) return "—";
+  let ms;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(String(value))) {
+    ms=parseNoaaLocalTimeMs(String(value).slice(0,16));
+  } else {
+    ms=new Date(value).getTime();
+  }
+  if (!Number.isFinite(ms)) return "—";
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit",
+    hourCycle:"h23",timeZoneName:"short"
+  }).formatToParts(new Date(ms));
+  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return `${p.hour}${p.minute} ${p.timeZoneName||"CT"}`;
+}
+
+async function noaaWind(station="8768094") {
+  const u=new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
+  u.searchParams.set("date","latest");
+  u.searchParams.set("station",station);
+  u.searchParams.set("product","wind");
+  u.searchParams.set("time_zone","lst_ldt");
+  u.searchParams.set("units","english");
+  u.searchParams.set("format","json");
+  u.searchParams.set("application","LCPTMS");
+  const j=await getJson(u.toString());
+  if(j.error) throw new Error(j.error.message||"NOAA wind error");
+  const row=(j.data||[]).at(-1);
+  if(!row) throw new Error("No NOAA wind observation");
+  const speedKt=num(row.s), gustKt=num(row.g), directionDeg=num(row.d);
+  const directionText=row.dr||compass16(directionDeg);
+  return {
+    station,stationName:"Calcasieu Pass / Cameron",
+    speedKt,gustKt,directionDeg,directionText,
+    observedAt:row.t,observedLocal:formatLocalObservationTime(row.t),
+    display:speedKt==null?"Unavailable":
+      `${directionText} ${speedKt.toFixed(0)} kt${gustKt!=null?` G${gustKt.toFixed(0)}`:""}`
+  };
+}
+
 async function noaaWaterLevel() {
   const u = new URL("https://api.tidesandcurrents.noaa.gov/api/prod/datagetter");
   u.searchParams.set("date", "latest");
@@ -310,36 +358,24 @@ async function noaaWaterLevel() {
 }
 
 async function nwsObservation() {
-  const j = await getJson(
-    "https://api.weather.gov/stations/KLCH/observations/latest",
-    {
-      Accept: "application/geo+json",
-      "User-Agent": "LCPTMS/0.4 operations@lcptms.com"
-    }
-  );
-
-  const p = j.properties || {};
-  const ms = p.windSpeed?.value;
-  const deg = p.windDirection?.value;
-  const meters = p.visibility?.value;
-
-  const kt = ms == null ? null : ms * 1.94384;
-  const nm = meters == null ? null : meters / 1852;
-
+  const j=await getJson("https://api.weather.gov/stations/KLCH/observations/latest",{
+    Accept:"application/geo+json","User-Agent":"LCPTMS/0.8 operations@lcptms.com"
+  });
+  const p=j.properties||{};
+  const ms=p.windSpeed?.value, gustMs=p.windGust?.value, deg=p.windDirection?.value;
+  const meters=p.visibility?.value;
+  const kt=ms==null?null:ms*1.94384, gustKt=gustMs==null?null:gustMs*1.94384;
+  const nm=meters==null?null:meters/1852, directionText=compass16(deg);
   return {
-    wind: {
-      valueKt: kt,
-      direction: deg,
-      display:
-        kt == null
-          ? "Unavailable"
-          : `${kt.toFixed(0)} kt @ ${deg == null ? "—" : Math.round(deg) + "°"}`
+    station:"KLCH",stationName:"Lake Charles Regional Airport",
+    wind:{
+      valueKt:kt,gustKt,direction:deg,directionText,observedAt:p.timestamp,
+      observedLocal:formatLocalObservationTime(p.timestamp),
+      display:kt==null?"Unavailable":
+        `${directionText} ${kt.toFixed(0)} kt${gustKt!=null?` G${gustKt.toFixed(0)}`:""}`
     },
-    visibility: {
-      valueNm: nm,
-      display: nm == null ? "Unavailable" : `${nm.toFixed(1)} NM`
-    },
-    timestamp: p.timestamp
+    visibility:{valueNm:nm,display:nm==null?"Unavailable":`${nm.toFixed(1)} NM`},
+    timestamp:p.timestamp,observedLocal:formatLocalObservationTime(p.timestamp)
   };
 }
 
@@ -473,7 +509,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.7.0",
+    schemaVersion: "0.8.0",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
@@ -486,10 +522,11 @@ export async function GET() {
     noaaCurrentHistory("lc0201", 30, 2), // 3
     noaaCurrentPredictions("lc0201", 20, 8), // 4 - Cameron prediction bin
     noaaPortsCurrentStates(),            // 5
-    noaaWaterLevel(),                    // 6
-    nwsObservation(),                    // 7
-    nhcStatus(),                         // 8
-    stormGeoStatus()                     // 9
+    noaaWind("8768094"),                 // 6
+    noaaWaterLevel(),                    // 7
+    nwsObservation(),                    // 8
+    nhcStatus(),                         // 9
+    stormGeoStatus()                     // 10
   ]);
 
   const [
@@ -497,6 +534,7 @@ export async function GET() {
     lb36HistRes, camHistRes,
     camPredRes,
     portsStateRes,
+    noaaWindRes,
     waterRes, nwsRes, nhcRes, stormRes
   ] = tasks;
 
@@ -539,6 +577,7 @@ export async function GET() {
         set: lb36Set,
         phase: lb36ObservedPhase || "DERIVED",
         observedAt: lb36Obs.time,
+        observedLocal: formatLocalObservationTime(lb36Obs.time),
         rawDirectionDeg: lb36Obs.direction,
         display:
           lb36Set === "SLACK"
@@ -578,6 +617,7 @@ export async function GET() {
             speedKt: camObs.speed,
             phase: camPhase,
             observedAt: camObs.time,
+            observedLocal: formatLocalObservationTime(camObs.time),
             rawDirectionDeg: camObs.direction,
             inboundEffect: operationalEffect(camPhase, "INBOUND"),
             outboundEffect: operationalEffect(camPhase, "OUTBOUND"),
@@ -624,6 +664,11 @@ export async function GET() {
 
     portsState: portsState || {},
 
+    wind:
+      noaaWindRes.status === "fulfilled"
+        ? noaaWindRes.value
+        : { display:"Unavailable", observedLocal:"—" },
+
     waterLevel:
       waterRes.status === "fulfilled"
         ? waterRes.value
@@ -644,6 +689,10 @@ export async function GET() {
     time: camObs.time,
     display: result.noaa.operational.cameron.actual.display
   } : { display: "Unavailable" };
+
+  if (result.noaa.waterLevel?.time) {
+    result.noaa.waterLevel.observedLocal=formatLocalObservationTime(result.noaa.waterLevel.time);
+  }
 
   result.nws =
     nwsRes.status === "fulfilled"
@@ -684,6 +733,7 @@ export async function GET() {
             }
           : buildDiagnostic(camPredRes),
       portsFloodEbbState: buildDiagnostic(portsStateRes),
+      windCalcasieuPass: buildDiagnostic(noaaWindRes),
       waterLevel: buildDiagnostic(waterRes)
     },
     nws: buildDiagnostic(nwsRes),
@@ -695,6 +745,7 @@ export async function GET() {
     noaa: !!lb36Obs || !!camObs || waterRes.status === "fulfilled",
     noaaPredictions: camPred.length > 0,
     noaaPortsState: !!portsState?.lb36 || !!portsState?.cameron,
+    noaaWind: noaaWindRes.status === "fulfilled",
     nws: nwsRes.status === "fulfilled",
     nhc: nhcRes.status === "fulfilled",
     stormgeo: !!result.stormgeo.configured
