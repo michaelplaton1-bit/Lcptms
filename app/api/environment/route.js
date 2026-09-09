@@ -454,14 +454,18 @@ async function nwsObservation() {
         speedConversion: windConv.conversion,
         gustValue: gustConv.rawValue,
         gustUnitCode: gustConv.rawUnit,
-        gustConversion: gustConv.conversion
+        gustConversion: gustConv.conversion,
+        sourceTimestampIso: p.timestamp,
+        renderedAmericaChicago: formatLocalObservationTime(p.timestamp)
       },
 
       display:
         windConv.knots == null
           ? "Unavailable"
           : `${directionText} ${windConv.knots.toFixed(0)} kt${
-              gustConv.knots != null ? ` G${gustConv.knots.toFixed(0)}` : ""
+              gustConv.knots != null && gustConv.knots >= 1
+                ? ` G${gustConv.knots.toFixed(0)}`
+                : ""
             }`
     },
 
@@ -605,7 +609,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.8.1",
+    schemaVersion: "0.8.2",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
