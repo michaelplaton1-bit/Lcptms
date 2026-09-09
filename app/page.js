@@ -76,15 +76,19 @@ function sideToText(m){
 function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
-  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
+  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[findings,setFindings]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
     setLoading(true);setErr("");
     try{
-      const [er,sr]=await Promise.all([fetch("/api/environment",{cache:"no-store"}),fetch("/api/schedule",{cache:"no-store"})]);
-      const [e,s]=await Promise.all([er.json(),sr.json()]);
+      const [er,sr,fr]=await Promise.all([
+        fetch("/api/environment",{cache:"no-store"}),
+        fetch("/api/schedule",{cache:"no-store"}),
+        fetch("/api/learning-findings",{cache:"no-store"})
+      ]);
+      const [e,s,f]=await Promise.all([er.json(),sr.json(),fr.json()]);
       if(!er.ok)throw new Error(e?.error||"Unable to load environmental feeds");
       if(!sr.ok)throw new Error(s?.error||"Unable to load schedule");
-      setEnv(e);setSchedule(s);
+      setEnv(e);setSchedule(s);setFindings(fr.ok===false?null:f);
     }catch(e){setErr(e.message);}finally{setLoading(false);}
   }
   useEffect(()=>{load();const c=setInterval(()=>setClock(new Date()),30000),r=setInterval(load,60000);return()=>{clearInterval(c);clearInterval(r)}},[]);
@@ -98,9 +102,10 @@ export default function Home(){
       <div className="sidebarFoot"><div className="avatar">LCP</div><div><b>Live read-only</b><span>Structured schedule</span></div></div>
     </aside>
     <main><header className="topbar"><div><h1>Lake Charles Pilots</h1><p>Traffic Management System</p></div><div className="topStats"><div className="topStat"><b>{timeText}</b><span>Lake Charles Local</span></div><div className="topStat"><b><Dot/> Live Schedule</b><span>{schedule?.fetchedAt?"Connected":"Loading"}</span></div><button className="iconBtn" onClick={load}>↻</button></div></header>
-      <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}</button>)}</div>
+      <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}{x==="AI Insights"&&((findings?.summary?.recommendedChanges||0)+(findings?.summary?.candidateFindings||0)>0)?<span className="insightBadge">{(findings?.summary?.recommendedChanges||0)+(findings?.summary?.candidateFindings||0)}</span>:null}</button>)}</div>
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
        tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
+       tab==="AI Insights"?<AIInsights findings={findings}/>:
        <Overview env={env} schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
     </main>
@@ -135,6 +140,29 @@ function PilotRow({m,type}){const d=m.display||{},n=m.native||{};return <tr>
   {type==="moving"&&<><td>{n.C6DateTime?fmtDateTime(n.C6DateTime):"—"}</td><td>{n.ICWWDateTime?fmtDateTime(n.ICWWDateTime):"—"}</td><td>{n.OffDock?fmtDateTime(n.OffDock):"—"}</td></>}
   {type==="arriving"&&<td>{n.LastPort||"—"}</td>}<td className="remarksCell">{n.Remarks||d.remarks||"—"}</td><td>{n.LastChange?fmtDateTime(n.LastChange):"—"}</td><td className="aiEta">{d.eta36||d.eta60||d.etaICW||"—"}{d.cameronEffect&&<small>{d.cameronEffect}</small>}</td>
 </tr>}
+function AIInsights({findings}){
+  const list=findings?.findings||[];
+  const s=findings?.summary||{};
+  return <section className="insightsPage">
+    <div className="insightMetrics">
+      <Metric n={s.recommendedChanges||0} label="Recommended Changes" sub="Evidence threshold reached"/>
+      <Metric n={s.candidateFindings||0} label="Candidate Findings" sub="Needs more review/data"/>
+      <Metric n={s.observations||0} label="Observations" sub="Being learned quietly"/>
+      <Metric n={findings?.snapshotCount||0} label="Snapshots Analyzed" sub="Recent 12-hour learning window"/>
+    </div>
+    <Card title="Operational Learning Notes — Past 12 Hours" right={findings?.persistent?"PERSISTENT":"STORAGE NOT CONFIGURED"}>
+      <div className="findingsList">
+        {list.length?list.map(f=><div className={`finding ${f.status}`} key={f.findingId}>
+          <div className="findingHead"><b>{f.type.replaceAll("_"," ")}</b><span>{f.status.replaceAll("_"," ")} · {f.confidence}</span></div>
+          <p>{f.suggestion}</p>
+          <div className="findingMeta">Sample: {f.sampleSize||0}{f.scope?.berth?` · Berth ${f.scope.berth}`:""}{f.scope?.direction?` · ${f.scope.direction}`:""}{f.lastObservedAt?` · Updated ${new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(f.lastObservedAt))}`:""}</div>
+          <small>No system rule is changed automatically.</small>
+        </div>):<div className="emptyLearning">{findings?.message||"No findings in the past 12 hours yet. The system needs repeated snapshots and completed movements before patterns become statistically useful."}</div>}
+      </div>
+    </Card>
+  </section>;
+}
+
 function Overview({env,schedule,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
   const modeled=liveUpcoming24h(moving,expected);
   return <section className="mainGrid"><div className="leftCol"><div className="metrics"><Metric n={moving.length} label="Vessels in VTIS" sub="Moving within region"/><Metric n={expected.length} label="Expected to Move" sub="Live schedule"/><Metric n={arriving.length} label="At or Near the Bar" sub="Arriving / Anchored"/><Metric n={inPort.length} label="Vessels in Port" sub="All facilities"/></div>
