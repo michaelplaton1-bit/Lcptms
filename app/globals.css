@@ -21,3 +21,21 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .commandBar{position:sticky;bottom:10px;margin-top:12px;border:1px solid #394149;background:#0f1317;border-radius:16px;padding:6px;display:flex;gap:7px;box-shadow:0 10px 35px #000a}.commandBar input{flex:1;background:transparent;color:white;border:0;outline:0;padding:10px;font-size:12px}.commandBar button{border:0;background:#171c22;color:white;border-radius:10px;padding:8px 11px}
 @media(max-width:1000px){.shell{grid-template-columns:1fr}.sidebar{display:none}.mainGrid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}main{padding:0 10px 20px}.topStats .topStat:first-child{display:none}.topbar{height:62px}}
 @media(max-width:600px){.envHeroGrid{grid-template-columns:1fr}.currentCompare{grid-template-columns:1fr}.outlookHead{display:block}.outlookLegend{justify-content:flex-start;margin-top:6px}}
+
+
+/* Pilot-facing dispatch sheet */
+.sidebar nav a{cursor:pointer}
+.pilotSheet{display:grid;gap:12px;align-content:start}
+.sheetStatus{display:grid;grid-template-columns:1fr 1fr auto;gap:10px}
+.sheetStatus>div{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.sheetStatus b{display:block;font-size:12px}.sheetStatus span{display:block;font-size:11px;color:#c3cad1;margin-top:4px}
+.sheetLive{min-width:120px}.sheetLive b{display:inline;font-size:11px}.sheetLive .dot{margin-right:6px}
+.scheduleSection{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.scheduleTitle{background:#18232c;border-bottom:1px solid #30404d;padding:10px 12px;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.scheduleTitle span{font-size:10px;color:#8fc9e9;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.pilotTable{min-width:1500px;font-size:11px}.pilotTable th{background:#101820;color:#9caab6;position:sticky;top:0;z-index:2;padding:8px 9px}.pilotTable td{padding:8px 9px}
+.pilotTable tbody tr:hover td{background:#141d24}.stickyVessel{position:sticky;left:0;z-index:1;background:#0d1419!important;min-width:165px;color:#fff;text-decoration:underline;text-underline-offset:2px}
+.pilotKey{font-weight:800;color:#f7fbff;background:#16232c!important;min-width:70px}.statusCell{font-weight:650}.draftCell{font-weight:700}
+.remarksCell{max-width:280px;overflow:hidden;text-overflow:ellipsis}.aiEta{font-weight:700;color:#d9ecf9}.aiEta small{display:block;color:#9fb1bd;font-size:8px;font-weight:500;margin-top:2px}
+.scheduleNotes{padding:6px 12px 10px}.scheduleNotes>div{padding:7px 0;border-bottom:1px solid #202a32;font-size:11px;line-height:1.35}.scheduleNotes>div:last-child{border-bottom:0}
+@media(max-width:900px){.sheetStatus{grid-template-columns:1fr}.pilotTable{min-width:1400px}}
