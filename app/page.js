@@ -73,9 +73,7 @@ function sideToText(m){
   return n.SideTo || n["?ST"] || "—";
 }
 
-function isUnderway(m){
-  return m?.section==="MOVING" || m?.movement?.movement?.status==="MOVING";
-}
+function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
   const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
@@ -95,7 +93,7 @@ export default function Home(){
   const lb36=env?.noaa?.operational?.lb36,cam=env?.noaa?.operational?.cameron,camPred=Array.isArray(cam?.prediction)?cam.prediction:[];
 
   return <div className="shell">
-    <aside className="sidebar"><div className="brand"><div className="mark">⚓</div><div><b>LCPTMS</b><span>Lake Charles Pilots</span></div></div>
+    <aside className="sidebar"><div className="brand"><img className="brandLogo" src="/lcp-logo.png" alt="Lake Charles Pilots logo"/><div><b>LCPTMS</b><span>Lake Charles Pilots</span></div></div>
       <nav><a className={tab==="Overview"?"active":""} onClick={()=>setTab("Overview")}>Dashboard</a><a className={tab==="Schedule"?"active":""} onClick={()=>setTab("Schedule")}>Schedule</a><a onClick={()=>setTab("Environmental")}>Environmental</a><a>Traffic Plan (AI)</a><a>What-If Analysis</a><a>Hurricane Monitor</a><a>Channel / ATON</a><a>Notes & Alerts</a><a>Reports</a></nav>
       <div className="sidebarFoot"><div className="avatar">LCP</div><div><b>Live read-only</b><span>Structured schedule</span></div></div>
     </aside>
@@ -146,7 +144,7 @@ function Overview({env,schedule,moving,expected,arriving,inPort,cam,lb36,camPred
   </tr></thead>
   <tbody>{modeled.length?modeled.map((m,i)=>{const d=m.display||{},n=m.native||{};return <tr key={m.logId||i}>
     <td className="vessel">
-      <span className="vesselState">{isUnderway(m)?<span className="underwayDot" title="Underway"/>:<span className="scheduledDot" title="Scheduled"/>}</span>
+      <span className="vesselState">{isUnderway(m)?<span className="underwayArrow" title="Underway">→</span>:<span className="scheduledDot" title="Scheduled"/>}</span>
       {d.vessel||n.VesselName||"—"}
       {isUnderway(m)&&<span className="underwayLabel">UNDERWAY</span>}
     </td>

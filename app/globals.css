@@ -55,3 +55,10 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .underwayDot{background:#52d273;box-shadow:0 0 0 2px rgba(82,210,115,.12)}
 .scheduledDot{background:#dce5eb;opacity:.55}
 .underwayLabel{display:inline-block;margin-left:8px;font-size:8px;letter-spacing:.06em;font-weight:800;color:#8fe3a6;vertical-align:middle}
+
+
+/* v1.3 branding + exact underway semantics */
+.brand{display:flex;align-items:center;gap:10px}
+.brandLogo{width:44px;height:44px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid #31414d;padding:2px}
+.underwayArrow{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:rgba(82,210,115,.12);color:#63dd82;font-size:13px;font-weight:900;line-height:1}
+.scheduledDot{background:#f2f6f8;opacity:.6}
