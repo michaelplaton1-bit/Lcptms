@@ -322,6 +322,29 @@ async function stormGeoStatus() {
   return { configured: true, display: "Configured — endpoint mapping next" };
 }
 
+
+function nearestPredictionToNow(predictions) {
+  if (!Array.isArray(predictions) || predictions.length === 0) return null;
+  const now = Date.now();
+
+  let best = null;
+  let bestDiff = Infinity;
+
+  for (const p of predictions) {
+    if (!p?.time) continue;
+    const t = new Date(String(p.time).replace(" ", "T")).getTime();
+    if (!Number.isFinite(t)) continue;
+
+    const diff = Math.abs(t - now);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = p;
+    }
+  }
+
+  return best;
+}
+
 function buildDiagnostic(settledResult) {
   return settledResult.status === "fulfilled"
     ? { ok: true }
@@ -330,7 +353,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.4.0",
+    schemaVersion: "0.5.0",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
@@ -341,19 +364,18 @@ export async function GET() {
     noaaLatestCurrent("lc0201", 30),     // 1
     noaaCurrentHistory("lc0101", 1, 2),  // 2
     noaaCurrentHistory("lc0201", 30, 2), // 3
-    noaaCurrentPredictions("lc0101", 1, 8),  // 4
-    noaaCurrentPredictions("lc0201", 30, 8), // 5
-    noaaPortsCurrentStates(),            // 6
-    noaaWaterLevel(),                    // 7
-    nwsObservation(),                    // 8
-    nhcStatus(),                         // 9
-    stormGeoStatus()                     // 10
+    noaaCurrentPredictions("lc0201", 20, 8), // 4 - Cameron prediction bin
+    noaaPortsCurrentStates(),            // 5
+    noaaWaterLevel(),                    // 6
+    nwsObservation(),                    // 7
+    nhcStatus(),                         // 8
+    stormGeoStatus()                     // 9
   ]);
 
   const [
     lb36ObsRes, camObsRes,
     lb36HistRes, camHistRes,
-    lb36PredRes, camPredRes,
+    camPredRes,
     portsStateRes,
     waterRes, nwsRes, nhcRes, stormRes
   ] = tasks;
@@ -362,7 +384,6 @@ export async function GET() {
   const camObs = camObsRes.status === "fulfilled" ? camObsRes.value : null;
   const lb36Hist = lb36HistRes.status === "fulfilled" ? lb36HistRes.value : [];
   const camHist = camHistRes.status === "fulfilled" ? camHistRes.value : [];
-  const lb36Pred = lb36PredRes.status === "fulfilled" ? lb36PredRes.value : [];
   const camPred = camPredRes.status === "fulfilled" ? camPredRes.value : [];
   const portsState = portsStateRes.status === "fulfilled" ? portsStateRes.value : {};
 
@@ -403,41 +424,64 @@ export async function GET() {
             ? `${lb36Obs.speed.toFixed(2)} kt slack`
             : `${lb36Obs.speed.toFixed(2)} kt ${lb36Set.toLowerCase()} set`,
         trend: trendFromHistory(lb36Hist),
+        forecastAvailable: false,
+        forecastNote: "LB36 cross current is live observation only",
         observedStateSource:
-          lb36ObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback",
-        prediction: lb36Pred.map(p => ({
-          ...p,
-          set:
-            p.phase === "EBB" ? "WESTERLY" :
-            p.phase === "FLOOD" ? "EASTERLY" :
-            p.phase
-        }))
+          lb36ObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback"
       } : {
         display: "Unavailable",
-        prediction: []
+        forecastAvailable: false,
+        forecastNote: "LB36 cross current is live observation only"
       },
 
-      cameron: camObs ? {
-        actual: {
-          speedKt: camObs.speed,
-          phase: camPhase,
-          observedAt: camObs.time,
-          rawDirectionDeg: camObs.direction,
-          inboundEffect: operationalEffect(camPhase, "INBOUND"),
-          outboundEffect: operationalEffect(camPhase, "OUTBOUND"),
-          display: `${camObs.speed.toFixed(2)} kt ${String(camPhase).toLowerCase()}`
-        },
-        trend: trendFromHistory(camHist),
-        forecastHours: 8,
-        observedStateSource:
-          camObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback",
-        prediction: camPred.map(p => ({
+      cameron: camObs ? (() => {
+        const prediction = camPred.map(p => ({
           ...p,
           inboundEffect: operationalEffect(p.phase, "INBOUND"),
           outboundEffect: operationalEffect(p.phase, "OUTBOUND")
-        }))
-      } : {
+        }));
+
+        const predictedNow = nearestPredictionToNow(prediction);
+        const deviationKt =
+          predictedNow && Number.isFinite(predictedNow.speed)
+            ? camObs.speed - predictedNow.speed
+            : null;
+
+        return {
+          actual: {
+            speedKt: camObs.speed,
+            phase: camPhase,
+            observedAt: camObs.time,
+            rawDirectionDeg: camObs.direction,
+            inboundEffect: operationalEffect(camPhase, "INBOUND"),
+            outboundEffect: operationalEffect(camPhase, "OUTBOUND"),
+            display: `${camObs.speed.toFixed(2)} kt ${String(camPhase).toLowerCase()}`
+          },
+          predictedNow,
+          deviationKt,
+          deviationDisplay:
+            deviationKt == null
+              ? "Unavailable"
+              : `${deviationKt >= 0 ? "+" : ""}${deviationKt.toFixed(2)} kt actual vs prediction`,
+          trend: trendFromHistory(camHist),
+          forecastHours: 8,
+          forecastModel: {
+            observationStation: "lc0201",
+            observationBin: 30,
+            predictionStation: "lc0201",
+            predictionBin: 20,
+            primaryPlanningHorizonHours: 6,
+            extendedPlanningHorizonHours: 8
+          },
+          observedStateSource:
+            camObservedPhase ? "NOAA PORTS Flood/Ebb/Slack label" : "Direction-vector fallback",
+          prediction
+        };
+      })() : {
         actual: { display: "Unavailable" },
+        predictedNow: null,
+        deviationKt: null,
+        deviationDisplay: "Unavailable",
         forecastHours: 8,
         prediction: []
       }
@@ -490,7 +534,11 @@ export async function GET() {
       cameronObservation: buildDiagnostic(camObsRes),
       lb36History: buildDiagnostic(lb36HistRes),
       cameronHistory: buildDiagnostic(camHistRes),
-      lb36Prediction: buildDiagnostic(lb36PredRes),
+      lb36Prediction: {
+        ok: null,
+        supported: false,
+        note: "LB36 cross current is live observation only; no prediction requested"
+      },
       cameronPrediction: buildDiagnostic(camPredRes),
       portsFloodEbbState: buildDiagnostic(portsStateRes),
       waterLevel: buildDiagnostic(waterRes)
@@ -502,7 +550,7 @@ export async function GET() {
 
   result.sources = {
     noaa: !!lb36Obs || !!camObs || waterRes.status === "fulfilled",
-    noaaPredictions: lb36Pred.length > 0 || camPred.length > 0,
+    noaaPredictions: camPred.length > 0,
     noaaPortsState: !!portsState?.lb36 || !!portsState?.cameron,
     nws: nwsRes.status === "fulfilled",
     nhc: nhcRes.status === "fulfilled",
