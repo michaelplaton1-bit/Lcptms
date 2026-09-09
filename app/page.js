@@ -31,21 +31,11 @@ export default function Home() {
     setLoading(true);
     setErr("");
     try {
-      const [envRes, scheduleRes] = await Promise.all([
-        fetch("/api/environment", { cache:"no-store" }),
-        fetch("/api/schedule", { cache:"no-store" })
-      ]);
-
-      const [data, scheduleData] = await Promise.all([
-        envRes.json(),
-        scheduleRes.json()
-      ]);
-
-      if (!envRes.ok) throw new Error(data?.error || "Unable to load environmental feeds");
-      if (!scheduleRes.ok) throw new Error(scheduleData?.error || "Unable to load schedule model");
-
-      setEnv(data);
-      setSchedule(scheduleData);
+      const [res,sr]=await Promise.all([fetch("/api/environment",{cache:"no-store"}),fetch("/api/schedule",{cache:"no-store"})]);
+      const [data,sd]=await Promise.all([res.json(),sr.json()]);
+      if(!res.ok)throw new Error(data?.error||"Unable to load environmental feeds");
+      if(!sr.ok)throw new Error(sd?.error||"Unable to load schedule model");
+      setEnv(data); setSchedule(sd);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -75,7 +65,7 @@ export default function Home() {
   const lb36 = env?.noaa?.operational?.lb36;
   const cam = env?.noaa?.operational?.cameron;
   const camPred = Array.isArray(cam?.prediction) ? cam.prediction : [];
-  const modeledMoves = Array.isArray(schedule?.items) ? schedule.items : [];
+  const modeledMoves=Array.isArray(schedule?.items)?schedule.items:[];
 
   return (
     <div className="shell">
@@ -125,46 +115,9 @@ export default function Home() {
               <Metric n="10" label="Vessels in Port" sub="All facilities"/>
             </div>
 
-            <Card title="Live / Upcoming Traffic" right={schedule?.source ? "MANUAL MODEL FEED" : "Loading"}>
-              <div className="tableWrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Vessel</th><th>Dir</th><th>Draft</th><th>Berth</th>
-                      <th>Ordered</th><th>PBT</th><th>Notice</th>
-                      <th>Route Start</th><th>Next Point</th><th>ETA</th><th>Flags</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modeledMoves.length ? modeledMoves.map((m,i) => (
-                      <tr key={m.movement?.audit?.sourceRecordId || i}>
-                        <td className="vessel">{m.display?.vessel || "—"}</td>
-                        <td>{m.display?.direction || "—"}</td>
-                        <td>{m.display?.draftFt != null ? `${m.display.draftFt.toFixed(1)}'` : "—"}</td>
-                        <td>{m.display?.berth || "—"}</td>
-                        <td>{m.display?.ordered || "—"}</td>
-                        <td>{m.display?.pbt || "—"}</td>
-                        <td>
-                          {m.display?.noticeRequiredHours != null
-                            ? `${m.display.noticeRequiredHours} HR • ${m.display.noticeStatus || "—"}`
-                            : "TBD"}
-                        </td>
-                        <td>{m.display?.berthAnchor || m.projection?.start?.waypoint || m.display?.berthMapStatus || "—"}</td>
-                        <td>{m.display?.nextWaypoint || m.projection?.reason || "—"}</td>
-                        <td>{m.display?.nextEta || "—"}</td>
-                        <td>{(m.display?.flags || []).join(", ") || "—"}</td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="11">Schedule model loading…</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {!!schedule?.unmappedBerths?.length && (
-                <div className="error" style={{marginTop:10}}>
-                  UNMAPPED BERTHS: {schedule.unmappedBerths.join(", ")} — awaiting operational anchor confirmation.
-                </div>
-              )}
+            <Card title="Live / Upcoming Traffic" right={schedule?.environmentConnected?"ETA + NOAA LINKED":"Loading"}>
+              <div className="tableWrap"><table><thead><tr><th>Vessel</th><th>Dir</th><th>Draft</th><th>Berth</th><th>PBT</th><th>36 ETA</th><th>Cameron @ ETA</th><th>Effect</th><th>60 ETA</th><th>ICW ETA</th><th>Flags</th></tr></thead>
+              <tbody>{modeledMoves.length?modeledMoves.map((m,i)=><tr key={i}><td className="vessel">{m.display?.vessel||"—"}</td><td>{m.display?.direction||"—"}</td><td>{m.display?.draftFt!=null?`${m.display.draftFt.toFixed(1)}'`:"—"}</td><td>{m.display?.berth||"—"}</td><td>{m.display?.pbt||"—"}</td><td>{m.display?.eta36||"—"}</td><td>{m.display?.cameronPrediction||"—"}</td><td><span className="risk"><Dot tone={m.display?.cameronEffect==="OPPOSING"?"yellow":"green"}/>{m.display?.cameronEffect||"—"}</span></td><td>{m.display?.eta60||"—"}</td><td>{m.display?.etaICW||"—"}</td><td>{(m.display?.flags||[]).join(", ")||"—"}</td></tr>):<tr><td colSpan="11">Loading…</td></tr>}</tbody></table></div>
             </Card>
 
             <Card title="AI Traffic Recommendation">
@@ -271,8 +224,7 @@ export default function Home() {
                 <Status label="NWS / KLCH" good={!!env?.sources?.nws}/>
                 <Status label="National Hurricane Center" good={!!env?.sources?.nhc}/>
                 <Status label="StormGeo" pending text="Pending credentials"/>
-                <Status label="Schedule ETA model" good={!!schedule?.items?.length} text={schedule?.items?.length ? "Manual demo feed" : "Unavailable"}/>
-                <Status label="LakeCharlesPilots.com live connector" pending text="Credentials pending"/>
+                <Status label="LakeCharlesPilots.com schedule" pending text="Pending read-only integration"/>
               </div>
             </Card>
           </div>
