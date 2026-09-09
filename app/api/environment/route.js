@@ -368,26 +368,101 @@ async function stormGeoStatus() {
 }
 
 
-function nearestPredictionToNow(predictions) {
-  if (!Array.isArray(predictions) || predictions.length === 0) return null;
-  const now = Date.now();
+function timezoneOffsetMsAt(utcMs, timeZone = "America/Chicago") {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date(utcMs));
+
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+  const asUtc = Date.UTC(
+    Number(p.year),
+    Number(p.month) - 1,
+    Number(p.day),
+    Number(p.hour),
+    Number(p.minute),
+    Number(p.second)
+  );
+
+  return asUtc - utcMs;
+}
+
+function parseNoaaLocalTimeMs(value, timeZone = "America/Chicago") {
+  if (!value) return NaN;
+
+  const m = String(value).trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+  if (!m) return NaN;
+
+  const [, y, mo, d, h, mi, s = "00"] = m;
+  const naiveUtc = Date.UTC(
+    Number(y),
+    Number(mo) - 1,
+    Number(d),
+    Number(h),
+    Number(mi),
+    Number(s)
+  );
+
+  let offset = timezoneOffsetMsAt(naiveUtc, timeZone);
+  let utcMs = naiveUtc - offset;
+  offset = timezoneOffsetMsAt(utcMs, timeZone);
+  utcMs = naiveUtc - offset;
+
+  return utcMs;
+}
+
+function nearestPredictionToObservation(predictions, observedLocalTime) {
+  if (!Array.isArray(predictions) || predictions.length === 0) {
+    return {
+      prediction: null,
+      predictionTimeDifferenceMinutes: null,
+      observedEpochMs: null,
+      predictionEpochMs: null
+    };
+  }
+
+  const observedMs = parseNoaaLocalTimeMs(observedLocalTime);
+  if (!Number.isFinite(observedMs)) {
+    return {
+      prediction: null,
+      predictionTimeDifferenceMinutes: null,
+      observedEpochMs: null,
+      predictionEpochMs: null
+    };
+  }
 
   let best = null;
+  let bestMs = null;
   let bestDiff = Infinity;
 
   for (const p of predictions) {
     if (!p?.time) continue;
-    const t = new Date(String(p.time).replace(" ", "T")).getTime();
+    const t = parseNoaaLocalTimeMs(p.time);
     if (!Number.isFinite(t)) continue;
 
-    const diff = Math.abs(t - now);
+    const diff = Math.abs(t - observedMs);
     if (diff < bestDiff) {
       bestDiff = diff;
       best = p;
+      bestMs = t;
     }
   }
 
-  return best;
+  return {
+    prediction: best,
+    predictionTimeDifferenceMinutes:
+      best == null ? null : Math.round((bestMs - observedMs) / 60000),
+    observedEpochMs: observedMs,
+    predictionEpochMs: bestMs
+  };
 }
 
 function buildDiagnostic(settledResult) {
@@ -398,7 +473,7 @@ function buildDiagnostic(settledResult) {
 
 export async function GET() {
   const result = {
-    schemaVersion: "0.6.0",
+    schemaVersion: "0.7.0",
     generatedAt: new Date().toISOString(),
     sources: {},
     diagnostics: {}
@@ -487,7 +562,12 @@ export async function GET() {
           outboundEffect: operationalEffect(p.phase, "OUTBOUND")
         }));
 
-        const predictedNow = nearestPredictionToNow(prediction);
+        const alignedPrediction = nearestPredictionToObservation(
+          prediction,
+          camObs.time
+        );
+
+        const predictedNow = alignedPrediction.prediction;
         const deviationKt =
           predictedNow && Number.isFinite(predictedNow.speed)
             ? camObs.speed - predictedNow.speed
@@ -504,11 +584,18 @@ export async function GET() {
             display: `${camObs.speed.toFixed(2)} kt ${String(camPhase).toLowerCase()}`
           },
           predictedNow,
+          comparedToObservedAt: camObs.time,
+          predictionTimeDifferenceMinutes:
+            alignedPrediction.predictionTimeDifferenceMinutes,
           deviationKt,
           deviationDisplay:
             deviationKt == null
               ? "Unavailable"
               : `${deviationKt >= 0 ? "+" : ""}${deviationKt.toFixed(2)} kt actual vs prediction`,
+          alignmentDisplay:
+            predictedNow == null
+              ? "Unavailable"
+              : `Observed ${camObs.time}; prediction ${predictedNow.time}; delta ${alignedPrediction.predictionTimeDifferenceMinutes} min`,
           trend: trendFromHistory(camHist),
           forecastHours: 8,
           predictionResponseShape: camPredPayload.responseShape,
