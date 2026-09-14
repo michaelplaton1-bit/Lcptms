@@ -76,22 +76,23 @@ function sideToText(m){
 function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
-  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[winds,setWinds]=useState(null),[trafficSuggestions,setTrafficSuggestions]=useState(null),[adminAuth,setAdminAuth]=useState(false),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
+  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[publishedWindows,setPublishedWindows]=useState(null),[winds,setWinds]=useState(null),[trafficSuggestions,setTrafficSuggestions]=useState(null),[adminAuth,setAdminAuth]=useState(false),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
     setLoading(true);setErr("");
     try{
-      const [er,sr,wr,cr,windr,tr]=await Promise.all([
+      const [er,sr,wr,cr,pwr,windr,tr]=await Promise.all([
         fetch("/api/environment",{cache:"no-store"}),
         fetch("/api/schedule",{cache:"no-store"}),
         fetch("/api/boarding-windows",{cache:"no-store"}),
         fetch("/api/boarding-window-calculator",{cache:"no-store"}),
+        fetch("/api/published-boarding-windows",{cache:"no-store"}),
         fetch("/api/wind-reports",{cache:"no-store"}),
         fetch("/api/traffic-suggestions",{cache:"no-store"})
       ]);
-      const [e,s,w,cw,wind,ts]=await Promise.all([er.json(),sr.json(),wr.json(),cr.json(),windr.json(),tr.json()]);
+      const [e,s,w,cw,pw,wind,ts]=await Promise.all([er.json(),sr.json(),wr.json(),cr.json(),pwr.json(),windr.json(),tr.json()]);
       if(!er.ok)throw new Error(e?.error||"Unable to load environmental feeds");
       if(!sr.ok)throw new Error(s?.error||"Unable to load schedule");
-      setEnv(e);setSchedule(s);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);setWinds(windr.ok===false?null:wind);setTrafficSuggestions(tr.ok===false?null:ts);
+      setEnv(e);setSchedule(s);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);setPublishedWindows(pwr.ok===false?null:pw);setWinds(windr.ok===false?null:wind);setTrafficSuggestions(tr.ok===false?null:ts);
     }catch(e){setErr(e.message);}finally{setLoading(false);}
   }
   async function loadPrivateInsights(){
@@ -130,7 +131,7 @@ export default function Home(){
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
        tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
        tab==="AI Insights"?<AIInsights insights={insights} env={env} schedule={schedule} calcWindows={calcWindows}/>:
-       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} winds={winds} trafficSuggestions={trafficSuggestions} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
+       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} publishedWindows={publishedWindows} winds={winds} trafficSuggestions={trafficSuggestions} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
     </main>
   </div>;
@@ -233,7 +234,7 @@ function AIInsights({insights,env,schedule,calcWindows}){
   </section>;
 }
 
-function Overview({env,schedule,windows,calcWindows,winds,trafficSuggestions,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
+function Overview({env,schedule,windows,calcWindows,publishedWindows,winds,trafficSuggestions,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
   const modeled=liveUpcoming24h(moving,expected);
   return <section className="mainGrid"><div className="leftCol"><div className="metrics"><Metric n={moving.length} label="Vessels in VTIS" sub="Moving within region"/><Metric n={expected.length} label="Expected to Move" sub="Live schedule"/><Metric n={arriving.length} label="At or Near the Bar" sub="Arriving / Anchored"/><Metric n={inPort.length} label="Vessels in Port" sub="All facilities"/></div>
   <Card title="Live / Upcoming Traffic" right="NOW + 24 HOURS"><div className="tableWrap"><table className="overviewTraffic"><thead><tr>
@@ -266,7 +267,7 @@ function Overview({env,schedule,windows,calcWindows,winds,trafficSuggestions,mov
       </div>)}
     </div>
   </Card></div>
-  <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/><CalculatedBoardingWindows calc={calcWindows} rules={windows}/></div></section>
+  <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/><PublishedBoardingWindows published={publishedWindows}/></div></section>
 }
 function bwTime(v){
   if(!v)return "—";
@@ -277,6 +278,26 @@ function bwTime(v){
     hour:"2-digit",minute:"2-digit",hourCycle:"h23"
   }).formatToParts(d).map(x=>[x.type,x.value]));
   return `${p.month}.${p.day} ${p.hour}${p.minute}`;
+}
+
+function PublishedBoardingWindows({published}){
+  const cats=published?.categories||[];
+  return <Card title="LCPTMS Boarding Windows" right="PUBLISHED · 12-HOUR SET">
+    <div className="calculatedWindows">
+      {cats.length?cats.map(cat=><div className="calcWindowGroup" key={cat.id}>
+        <div className="calcWindowTitle">{cat.label}</div>
+        <div className="calcWindowCols"><b>OPEN</b><b>CLOSE</b></div>
+        {(cat.windows||[]).slice(0,8).map((w,i)=><div className="calcWindowRow" key={i}>
+          <span>{bwTime(w.open)}</span><span>{bwTime(w.close)}</span>
+        </div>)}
+      </div>):<div className="calcWindowEmpty">Published window set unavailable</div>}
+      <div className="calcWindowFooter">
+        <span>Times rounded to nearest 15 minutes</span>
+        <span>{published?.publishedAt?`Published ${fmtDateTime(published.publishedAt)}`:"—"}</span>
+        <span>{published?.periodId?`Set ${published.periodId}`:""}</span>
+      </div>
+    </div>
+  </Card>;
 }
 
 function CalculatedBoardingWindows({calc,rules}){
@@ -332,8 +353,9 @@ function EnvironmentalCard({env,cam,lb36,camPred,winds,loading,err}){return <Car
 {err&&<div className="error">{err}</div>}</Card>}
 function WindReport({label,report}){
   const speed=report?.speedKt, gust=report?.gustKt;
-  const text=speed!=null?`${report?.direction||"—"} ${speed.toFixed(0)} kt${gust!=null&&gust>speed+0.5?` G${gust.toFixed(0)}`:""}`:"—";
-  return <div className="windReportRow"><span>{label}</span><b>{text}</b><small>{report?.source||"—"}</small></div>;
+  const text=speed!=null?`${report?.direction||"—"} ${speed.toFixed(0)} kt${gust!=null&&gust>speed+0.5?` G${gust.toFixed(0)}`:""}`:"NO DATA";
+  const source=report?.station||report?.source||"Feed unavailable";
+  return <div className="windReportRow"><span>{label}</span><b>{text}</b><small>{source}{report?.fallback?" · FALLBACK":""}</small></div>;
 }
 
 function CurrentOutlook({prediction}) {

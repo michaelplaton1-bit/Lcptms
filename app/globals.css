@@ -133,3 +133,7 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .latestWindowCompare{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:8px;font-size:8px;color:#8fa1ac}
 .trafficSuggestion+ .trafficSuggestion{border-top:1px solid #26323a;margin-top:10px;padding-top:10px}
 @media(max-width:900px){.activityRow{grid-template-columns:80px 100px 1fr}.accuracyNumbers,.latestWindowCompare{grid-template-columns:1fr}}
+
+/* v1.8.4 stable publication + wind diagnostics */
+.calcWindowFooter{grid-template-columns:1fr;line-height:1.35}
+.windReportRow small{max-width:220px}
