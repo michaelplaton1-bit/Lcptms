@@ -1,0 +1,17 @@
+name: LCPTMS Continuous Learning
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture LCPTMS learning snapshot
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
+            https://lcptms.vercel.app/api/learning-capture

@@ -76,25 +76,46 @@ function sideToText(m){
 function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
-  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[winds,setWinds]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
+  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[winds,setWinds]=useState(null),[trafficSuggestions,setTrafficSuggestions]=useState(null),[adminAuth,setAdminAuth]=useState(false),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
     setLoading(true);setErr("");
     try{
-      const [er,sr,ir,wr,cr,windr]=await Promise.all([
+      const [er,sr,wr,cr,windr,tr]=await Promise.all([
         fetch("/api/environment",{cache:"no-store"}),
         fetch("/api/schedule",{cache:"no-store"}),
-        fetch("/api/learning-insights",{cache:"no-store"}),
         fetch("/api/boarding-windows",{cache:"no-store"}),
         fetch("/api/boarding-window-calculator",{cache:"no-store"}),
-        fetch("/api/wind-reports",{cache:"no-store"})
+        fetch("/api/wind-reports",{cache:"no-store"}),
+        fetch("/api/traffic-suggestions",{cache:"no-store"})
       ]);
-      const [e,s,i,w,cw,wind]=await Promise.all([er.json(),sr.json(),ir.json(),wr.json(),cr.json(),windr.json()]);
+      const [e,s,w,cw,wind,ts]=await Promise.all([er.json(),sr.json(),wr.json(),cr.json(),windr.json(),tr.json()]);
       if(!er.ok)throw new Error(e?.error||"Unable to load environmental feeds");
       if(!sr.ok)throw new Error(s?.error||"Unable to load schedule");
-      setEnv(e);setSchedule(s);setInsights(ir.ok===false?null:i);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);setWinds(windr.ok===false?null:wind);
+      setEnv(e);setSchedule(s);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);setWinds(windr.ok===false?null:wind);setTrafficSuggestions(tr.ok===false?null:ts);
     }catch(e){setErr(e.message);}finally{setLoading(false);}
   }
-  useEffect(()=>{load();const c=setInterval(()=>setClock(new Date()),30000),r=setInterval(load,60000);return()=>{clearInterval(c);clearInterval(r)}},[]);
+  async function loadPrivateInsights(){
+    const r=await fetch("/api/learning-insights",{cache:"no-store"});
+    if(r.ok){setInsights(await r.json());setAdminAuth(true);return true;}
+    setAdminAuth(false);setInsights(null);return false;
+  }
+  async function checkAdmin(){
+    try{
+      const r=await fetch("/api/admin-auth",{cache:"no-store"});
+      const j=await r.json();
+      setAdminAuth(!!j.authorized);
+      if(j.authorized)await loadPrivateInsights();
+    }catch{}
+  }
+  async function openAdmin(){
+    if(adminAuth){setTab("AI Insights");await loadPrivateInsights();return;}
+    const key=window.prompt("LCPTMS admin key");
+    if(!key)return;
+    const r=await fetch("/api/admin-auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key})});
+    if(r.ok){setAdminAuth(true);await loadPrivateInsights();setTab("AI Insights");}
+    else window.alert("Admin authorization failed.");
+  }
+  useEffect(()=>{load();checkAdmin();const c=setInterval(()=>setClock(new Date()),30000),r=setInterval(load,60000),a=setInterval(()=>{if(adminAuth)loadPrivateInsights()},60000);return()=>{clearInterval(c);clearInterval(r);clearInterval(a)}},[adminAuth]);
   const timeText=useMemo(()=>new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hourCycle:"h23",timeZoneName:"short"}).format(clock),[clock]);
   const items=schedule?.items||[],moving=sectionItems(items,"MOVING"),expected=sectionItems(items,"EXPECTED"),arriving=sectionItems(items,"ARRIVING"),inPort=sectionItems(items,"IN_PORT");
   const lb36=env?.noaa?.operational?.lb36,cam=env?.noaa?.operational?.cameron,camPred=Array.isArray(cam?.prediction)?cam.prediction:[];
@@ -104,12 +125,12 @@ export default function Home(){
       <nav><a className={tab==="Overview"?"active":""} onClick={()=>setTab("Overview")}>Dashboard</a><a className={tab==="Schedule"?"active":""} onClick={()=>setTab("Schedule")}>Schedule</a><a onClick={()=>setTab("Environmental")}>Environmental</a><a>Traffic Plan (AI)</a><a>What-If Analysis</a><a>Hurricane Monitor</a><a>Channel / ATON</a><a>Notes & Alerts</a><a>Reports</a></nav>
       <div className="sidebarFoot"><div className="avatar">LCP</div><div><b>Live read-only</b><span>Structured schedule</span></div></div>
     </aside>
-    <main><header className="topbar"><div><h1>Lake Charles Pilots</h1><p>Traffic Management System</p></div><div className="topStats"><div className="topStat"><b>{timeText}</b><span>Lake Charles Local</span></div><div className="topStat"><b><Dot/> Live Schedule</b><span>{schedule?.fetchedAt?"Connected":"Loading"}</span></div><button className="iconBtn" onClick={load}>↻</button></div></header>
-      <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}</button>)}</div>
+    <main><header className="topbar"><div><h1>Lake Charles Pilots</h1><p>Traffic Management System</p></div><div className="topStats"><div className="topStat"><b>{timeText}</b><span>Lake Charles Local</span></div><div className="topStat"><b><Dot/> Live Schedule</b><span>{schedule?.fetchedAt?"Connected":"Loading"}</span></div><button className="adminBtn" onClick={openAdmin}>{adminAuth?"AI Admin":"Admin"}</button><button className="iconBtn" onClick={load}>↻</button></div></header>
+      <div className="tabs">{["Overview","Waterway","Schedule","Environmental",...(adminAuth?["AI Insights"]:[])].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}</button>)}</div>
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
-       tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/>:
+       tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
        tab==="AI Insights"?<AIInsights insights={insights} env={env} schedule={schedule} calcWindows={calcWindows}/>:
-       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} winds={winds} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
+       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} winds={winds} trafficSuggestions={trafficSuggestions} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
     </main>
   </div>;
@@ -145,39 +166,60 @@ function PilotRow({m,type}){const d=m.display||{},n=m.native||{};return <tr>
 </tr>}
 function AIInsights({insights,env,schedule,calcWindows}){
   const findings=insights?.findings||[];
-  const heuristics=insights?.heuristics||[];
+  const activity=insights?.recentActivity||[];
+  const cats=insights?.windowAccuracy?.categories||[];
   const s=insights?.summary||{};
   return <section className="insightsPage">
+    <div className="adminPrivateBanner">PRIVATE ADMIN VIEW · Persistent learning history is not shown to normal LCPTMS users.</div>
     <div className="insightMetrics">
-      <Metric n={s.liveRecords||0} label="Live Ledger Records" sub="Current schedule state"/>
-      <Metric n={s.moving||0} label="Underway" sub="LCP MOVING section only"/>
-      <Metric n={s.environmentalIntersections||0} label="Env Intersections" sub="Current ETA / Cameron matches"/>
-      <Metric n={s.findings||0} label="Current Findings" sub="Reviewable AI notes"/>
+      <Metric n={insights?.snapshotCount||0} label="Learning Snapshots" sub="Persistent off-site history"/>
+      <Metric n={s.uniqueJobsObserved||0} label="Unique Jobs Learned" sub="Tracked by LogID"/>
+      <Metric n={s.pbtRevisionJobs||0} label="PBT Revision Jobs" sub="Ordered/PBT remain separate"/>
+      <Metric n={s.officialWindowsCompared||0} label="Windows Compared" sub="LCPTMS vs official LCP"/>
     </div>
 
-    <Card title="AI Learning Notes" right="CURRENT SESSION">
-      <div className="findingsList">
-        {findings.length?findings.map(f=><div className="finding" key={f.id}>
-          <div className="findingHead"><b>{f.title}</b><span>{f.status} · {f.confidence}</span></div>
-          <p>{f.detail}</p>
-          <div className="findingSuggestion"><b>Suggested system response:</b> {f.suggestion}</div>
-          <small>No operating rule is changed automatically.</small>
-        </div>):<div className="emptyLearning">{insights?.note||"No AI learning notes are available yet."}</div>}
+    <Card title="Live Learning Activity" right={insights?.lastSnapshotAt?`UPDATED ${fmtDateTime(insights.lastSnapshotAt)}`:"WAITING FOR FIRST CAPTURE"}>
+      <div className="learningActivity">
+        {activity.length?activity.map((a,i)=><div className="activityRow" key={`${a.logId}-${i}`}>
+          <span>{fmtDateTime(a.at)}</span><b>{a.type.replaceAll("_"," ")}</b><p>{a.detail}</p>
+        </div>):<div className="emptyLearning">No stored schedule changes yet. The background collector will begin building this list after multiple captures.</div>}
       </div>
     </Card>
 
-    <Card title="Human Operational Heuristics" right="LOOSE INFO NOTES">
+    <Card title="Boarding Window Accuracy" right="LCPTMS vs LAKECHARLESPILOTS.COM">
+      <div className="windowAccuracyGrid">
+        {cats.length?cats.map(c=><div className="accuracyCard" key={c.id}>
+          <div className="findingHead"><b>{c.label}</b><span>{c.confidence} · n={c.sampleSize}</span></div>
+          <div className="accuracyNumbers">
+            <div><span>RAW MAE</span><b>{c.rawMAEminutes!=null?`${c.rawMAEminutes} min`:"—"}</b></div>
+            <div><span>BIAS-ADJUSTED MAE</span><b>{c.adjustedMAEminutes!=null?`${c.adjustedMAEminutes} min`:"—"}</b></div>
+            <div><span>IMPROVEMENT</span><b>{c.adjustmentImprovementMinutes!=null?`${c.adjustmentImprovementMinutes>=0?"+":""}${c.adjustmentImprovementMinutes} min`:"—"}</b></div>
+          </div>
+          {c.latest?.official?<div className="latestWindowCompare">
+            <span>Latest official: {bwTime(c.latest.official.open)} → {bwTime(c.latest.official.close)}</span>
+            <span>Raw error: {c.latest.rawErrorMinutes?`${c.latest.rawErrorMinutes.open>=0?"+":""}${c.latest.rawErrorMinutes.open} / ${c.latest.rawErrorMinutes.close>=0?"+":""}${c.latest.rawErrorMinutes.close} min`:"—"}</span>
+            <span>Adjusted error: {c.latest.adjustedErrorMinutes?`${c.latest.adjustedErrorMinutes.open>=0?"+":""}${c.latest.adjustedErrorMinutes.open} / ${c.latest.adjustedErrorMinutes.close>=0?"+":""}${c.latest.adjustedErrorMinutes.close} min`:"—"}</span>
+          </div>:null}
+        </div>):<div className="emptyLearning">Official-window comparisons will appear after the collector successfully parses and stores multiple LC AI Current Set cycles.</div>}
+      </div>
+    </Card>
+
+    <Card title="AI Findings & Suggested Changes" right="REVIEW ONLY">
       <div className="findingsList">
-        {heuristics.map((h,i)=><div className="finding heuristic" key={i}><div className="findingHead"><b>{h.title}</b><span>HUMAN KNOWLEDGE</span></div><p>{h.detail}</p></div>)}
+        {findings.length?findings.map(f=><div className="finding" key={f.id}>
+          <div className="findingHead"><b>{f.title}</b><span>{f.confidence} · n={f.sampleSize||0}</span></div>
+          <p>{f.detail}</p>
+          <div className="findingSuggestion"><b>Suggested response:</b> {f.suggestion}</div>
+          <small>LCPTMS does not automatically change operating rules from a finding.</small>
+        </div>):<div className="emptyLearning">The engine has not accumulated enough persistent evidence for a finding yet.</div>}
       </div>
     </Card>
 
     <Card title="Environmental Forecast Learning" right="ACTUAL vs PREDICTED">
       <div className="biasGrid">
-        <div><span>CAMERON CURRENT BIAS</span><b>{calcWindows?.environmentalBias?.current?.residualKt!=null?`${calcWindows.environmentalBias.current.residualKt>=0?"+":""}${calcWindows.environmentalBias.current.residualKt.toFixed(2)} kt`:"—"}</b><small>Actual minus predicted at observation time</small></div>
-        <div><span>WATER LEVEL BIAS</span><b>{calcWindows?.environmentalBias?.tide?.residualFt!=null?`${calcWindows.environmentalBias.tide.residualFt>=0?"+":""}${calcWindows.environmentalBias.tide.residualFt.toFixed(2)} ft`:"—"}</b><small>Actual minus predicted MLLW</small></div>
+        <div><span>CAMERON CURRENT BIAS</span><b>{calcWindows?.environmentalBias?.current?.residualKt!=null?`${calcWindows.environmentalBias.current.residualKt>=0?"+":""}${calcWindows.environmentalBias.current.residualKt.toFixed(2)} kt`:"—"}</b><small>Actual minus interpolated prediction</small></div>
+        <div><span>WATER LEVEL BIAS</span><b>{calcWindows?.environmentalBias?.tide?.residualFt!=null?`${calcWindows.environmentalBias.tide.residualFt>=0?"+":""}${calcWindows.environmentalBias.tide.residualFt.toFixed(2)} ft`:"—"}</b><small>Actual minus interpolated prediction MLLW</small></div>
       </div>
-      <div className="learningNote">LCPTMS currently applies the recent Cameron-current residual to a short-term bias-adjusted forecast that decays over 6 hours. Tide bias is tracked for learning but is not yet allowed to change a boarding window until the exact tide-height criteria are validated.</div>
     </Card>
 
     <Card title="Connection Status" right="SYSTEM HEALTH">
@@ -185,13 +227,13 @@ function AIInsights({insights,env,schedule,calcWindows}){
         <Status label="LakeCharlesPilots.com schedule" good={!!schedule?.items?.length} text={schedule?.items?.length?"Live structured feed":"Unavailable"}/>
         <Status label="NOAA PORTS" good={!!env?.sources?.noaa}/>
         <Status label="NWS / KLCH" good={!!env?.sources?.nws}/>
-        <Status label="StormGeo" pending text="Pending integration"/>
+        <Status label="Persistent learning" good={!!insights?.persistent} text={insights?.persistent?"Vercel Blob connected":"Storage unavailable"}/>
       </div>
     </Card>
   </section>;
 }
 
-function Overview({env,schedule,windows,calcWindows,winds,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
+function Overview({env,schedule,windows,calcWindows,winds,trafficSuggestions,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
   const modeled=liveUpcoming24h(moving,expected);
   return <section className="mainGrid"><div className="leftCol"><div className="metrics"><Metric n={moving.length} label="Vessels in VTIS" sub="Moving within region"/><Metric n={expected.length} label="Expected to Move" sub="Live schedule"/><Metric n={arriving.length} label="At or Near the Bar" sub="Arriving / Anchored"/><Metric n={inPort.length} label="Vessels in Port" sub="All facilities"/></div>
   <Card title="Live / Upcoming Traffic" right="NOW + 24 HOURS"><div className="tableWrap"><table className="overviewTraffic"><thead><tr>
@@ -216,7 +258,14 @@ function Overview({env,schedule,windows,calcWindows,winds,moving,expected,arrivi
     <td className="aiEta">{d.eta60||"—"}</td>
     <td className="aiEta">{d.etaICW||"—"}</td>
   </tr>}):<tr><td colSpan="12">No live or scheduled movements in the next 24 hours.</td></tr>}</tbody></table></div></Card>
-  <Card title="AI Traffic Recommendation"><div className="recommendation"><div className="eyebrow">INITIAL PLANNING LOGIC</div><h2>Protect the narrowest environmental windows first.</h2><p>LCPTMS now has live structured schedule data. The next layer will compare vessel ETAs against current/tide windows and traffic constraints.</p></div></Card></div>
+  <Card title="AI Traffic Suggestions" right="LEARNING LAYER">
+    <div className="recommendation">
+      {(trafficSuggestions?.suggestions||[]).map((s,i)=><div className="trafficSuggestion" key={i}>
+        <div className="eyebrow">{s.type?.replaceAll("_"," ")||"AI"}</div>
+        <h2>{s.title}</h2><p>{s.text}</p>
+      </div>)}
+    </div>
+  </Card></div>
   <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/><CalculatedBoardingWindows calc={calcWindows} rules={windows}/></div></section>
 }
 function bwTime(v){
@@ -274,7 +323,7 @@ function BoardingWindowsBox({windows}){
   </Card>;
 }
 
-function EnvironmentalOnly({env,cam,lb36,camPred,winds,loading,err}){return <div className="rightCol" style={{maxWidth:760}}><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/></div>}
+function EnvironmentalOnly({env,cam,lb36,camPred,loading,err}){return <div className="rightCol" style={{maxWidth:760}}><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/></div>}
 function EnvironmentalCard({env,cam,lb36,camPred,winds,loading,err}){return <Card title="Environmental Conditions" right={loading?"Refreshing…":"60 sec polling"}><div className="envHeroGrid"><EnvHero title="36 BUOY CROSS CURRENT" value={lb36?.display||env?.noaa?.lb36?.display} status={lb36?.trend?.label} timestamp={lb36?.observedLocal} foot="LIVE ONLY • NOAA PORTS"/><EnvHero title="CAMERON CURRENT" value={cam?.actual?.display||env?.noaa?.cameron?.display} status={cam?.actual?.inboundEffect?`INBOUND ${cam.actual.inboundEffect}`:"—"} timestamp={cam?.actual?.observedLocal} foot={cam?.actual?.outboundEffect?`OUTBOUND ${cam.actual.outboundEffect}`:"NOAA PORTS"}/></div><div className="currentCompare"><div><span>ACTUAL</span><b>{cam?.actual?.speedKt!=null?`${cam.actual.speedKt.toFixed(2)} kt ${cam.actual.phase}`:"—"}</b></div><div><span>PREDICTED NOW</span><b>{cam?.predictedNow?.speed!=null?`${cam.predictedNow.speed.toFixed(2)} kt ${cam.predictedNow.phase}`:"—"}</b></div><div><span>RESIDUAL</span><b>{cam?.deviationKt!=null?`${cam.deviationKt>=0?"+":""}${cam.deviationKt.toFixed(2)} kt`:"—"}</b></div></div><CurrentOutlook prediction={camPred}/>
 <div className="windReports">
   <WindReport label="Calcasieu Pass Wind" report={winds?.calcasieuPass}/>

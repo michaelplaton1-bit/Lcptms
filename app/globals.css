@@ -117,3 +117,19 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .windReportRow span{color:#dce5ea}
 .windReportRow b{font-size:11px;color:#f6f8f9}
 .windReportRow small{font-size:8px;color:#7e919d;text-align:right}
+
+
+/* Persistent private learning v1.8 */
+.adminBtn{border:1px solid #2b3942;background:#11191f;color:#b7c5ce;border-radius:7px;padding:8px 11px;font-size:10px;cursor:pointer}
+.adminPrivateBanner{border:1px solid #3b4650;background:#0b1115;border-radius:8px;padding:9px 11px;color:#93a5b1;font-size:9px;letter-spacing:.04em}
+.learningActivity{display:grid}
+.activityRow{display:grid;grid-template-columns:100px 130px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid #26323a;align-items:start}
+.activityRow span{font-size:9px;color:#8395a1}.activityRow b{font-size:9px;color:#dce6eb}.activityRow p{font-size:10px;margin:0;color:#c3d0d7;line-height:1.35}
+.windowAccuracyGrid{display:grid;gap:10px}
+.accuracyCard{border:1px solid #27343d;border-radius:8px;padding:11px;background:#0c1318}
+.accuracyNumbers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.accuracyNumbers>div{border-top:1px solid #26323a;padding-top:7px}
+.accuracyNumbers span{display:block;color:#7f929e;font-size:8px}.accuracyNumbers b{display:block;margin-top:3px;font-size:13px;color:#f3f6f7}
+.latestWindowCompare{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:8px;font-size:8px;color:#8fa1ac}
+.trafficSuggestion+ .trafficSuggestion{border-top:1px solid #26323a;margin-top:10px;padding-top:10px}
+@media(max-width:900px){.activityRow{grid-template-columns:80px 100px 1fr}.accuracyNumbers,.latestWindowCompare{grid-template-columns:1fr}}
