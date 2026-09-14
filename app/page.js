@@ -107,7 +107,7 @@ export default function Home(){
     <main><header className="topbar"><div><h1>Lake Charles Pilots</h1><p>Traffic Management System</p></div><div className="topStats"><div className="topStat"><b>{timeText}</b><span>Lake Charles Local</span></div><div className="topStat"><b><Dot/> Live Schedule</b><span>{schedule?.fetchedAt?"Connected":"Loading"}</span></div><button className="iconBtn" onClick={load}>↻</button></div></header>
       <div className="tabs">{["Overview","Waterway","Schedule","Environmental","AI Insights"].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?"active":""}>{x}</button>)}</div>
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
-       tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
+       tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/>:
        tab==="AI Insights"?<AIInsights insights={insights} env={env} schedule={schedule} calcWindows={calcWindows}/>:
        <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} winds={winds} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
@@ -274,7 +274,7 @@ function BoardingWindowsBox({windows}){
   </Card>;
 }
 
-function EnvironmentalOnly({env,cam,lb36,camPred,loading,err}){return <div className="rightCol" style={{maxWidth:760}}><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/></div>}
+function EnvironmentalOnly({env,cam,lb36,camPred,winds,loading,err}){return <div className="rightCol" style={{maxWidth:760}}><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/></div>}
 function EnvironmentalCard({env,cam,lb36,camPred,winds,loading,err}){return <Card title="Environmental Conditions" right={loading?"Refreshing…":"60 sec polling"}><div className="envHeroGrid"><EnvHero title="36 BUOY CROSS CURRENT" value={lb36?.display||env?.noaa?.lb36?.display} status={lb36?.trend?.label} timestamp={lb36?.observedLocal} foot="LIVE ONLY • NOAA PORTS"/><EnvHero title="CAMERON CURRENT" value={cam?.actual?.display||env?.noaa?.cameron?.display} status={cam?.actual?.inboundEffect?`INBOUND ${cam.actual.inboundEffect}`:"—"} timestamp={cam?.actual?.observedLocal} foot={cam?.actual?.outboundEffect?`OUTBOUND ${cam.actual.outboundEffect}`:"NOAA PORTS"}/></div><div className="currentCompare"><div><span>ACTUAL</span><b>{cam?.actual?.speedKt!=null?`${cam.actual.speedKt.toFixed(2)} kt ${cam.actual.phase}`:"—"}</b></div><div><span>PREDICTED NOW</span><b>{cam?.predictedNow?.speed!=null?`${cam.predictedNow.speed.toFixed(2)} kt ${cam.predictedNow.phase}`:"—"}</b></div><div><span>RESIDUAL</span><b>{cam?.deviationKt!=null?`${cam.deviationKt>=0?"+":""}${cam.deviationKt.toFixed(2)} kt`:"—"}</b></div></div><CurrentOutlook prediction={camPred}/>
 <div className="windReports">
   <WindReport label="Calcasieu Pass Wind" report={winds?.calcasieuPass}/>
