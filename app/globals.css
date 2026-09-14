@@ -77,3 +77,35 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .finding small{display:block;margin-top:7px;color:#71818c}
 .emptyLearning{padding:16px;font-size:12px;color:#9eacb6}
 @media(max-width:900px){.insightMetrics{grid-template-columns:1fr 1fr}}
+
+
+/* Boarding window model v0.1 */
+.boardingWindowList{display:grid;gap:0}
+.boardingWindowRow{padding:11px 0;border-bottom:1px solid #24313a}
+.boardingWindowRow:last-of-type{border-bottom:0}
+.boardingWindowHead{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.boardingWindowHead b{font-size:11px;color:#f1f6f8}
+.boardingWindowHead span{font-size:8px;letter-spacing:.06em;color:#8fb7cf}
+.windowShips{margin-top:4px;font-size:10px;color:#d7e5ed;font-weight:650}
+.windowRule{display:grid;grid-template-columns:42px 1fr;gap:6px;margin-top:6px;font-size:9px;line-height:1.35;color:#aab8c1}
+.windowRule span{font-weight:800;font-size:8px;letter-spacing:.05em}
+.openRule span{color:#70d68c}
+.closeRule span{color:#f1a86a}
+.windowAuthority{margin-top:10px;padding:8px;border:1px solid #394753;border-radius:7px;background:#101820;color:#8999a4;font-size:9px;line-height:1.35}
+
+
+/* LCPTMS calculated boarding windows v0.1 — black/white schedule-sheet treatment */
+.calculatedWindows{font-family:inherit;color:#f6f8f9}
+.calcWindowGroup{padding:10px 0 12px;border-bottom:1px solid #27323a}
+.calcWindowGroup:last-of-type{border-bottom:0}
+.calcWindowTitle{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;margin-bottom:7px}
+.calcWindowCols,.calcWindowRow{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.calcWindowCols{font-size:9px;color:#fff;margin-bottom:4px}
+.calcWindowRow{font-size:10px;line-height:1.6;font-variant-numeric:tabular-nums;color:#f4f7f8}
+.calcWindowEmpty{font-size:9px;color:#778894;padding:4px 0}
+.calcWindowFooter{display:grid;gap:3px;margin-top:10px;padding-top:9px;border-top:1px solid #35424b;font-size:8px;color:#7f919d}
+.biasGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.biasGrid>div{border:1px solid #283640;border-radius:8px;padding:10px;background:#0d1419}
+.biasGrid span,.biasGrid small{display:block;color:#8fa0ac;font-size:8px}
+.biasGrid b{display:block;margin:5px 0;font-size:17px}
+.learningNote{margin-top:10px;color:#9cabb5;font-size:10px;line-height:1.45}
