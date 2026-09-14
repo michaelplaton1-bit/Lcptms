@@ -76,21 +76,22 @@ function sideToText(m){
 function isUnderway(m){ return m?.section==="MOVING"; }
 
 export default function Home(){
-  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
+  const [env,setEnv]=useState(null),[schedule,setSchedule]=useState(null),[insights,setInsights]=useState(null),[windows,setWindows]=useState(null),[calcWindows,setCalcWindows]=useState(null),[winds,setWinds]=useState(null),[err,setErr]=useState(""),[loading,setLoading]=useState(true),[clock,setClock]=useState(new Date()),[tab,setTab]=useState("Overview");
   async function load(){
     setLoading(true);setErr("");
     try{
-      const [er,sr,ir,wr,cr]=await Promise.all([
+      const [er,sr,ir,wr,cr,windr]=await Promise.all([
         fetch("/api/environment",{cache:"no-store"}),
         fetch("/api/schedule",{cache:"no-store"}),
         fetch("/api/learning-insights",{cache:"no-store"}),
         fetch("/api/boarding-windows",{cache:"no-store"}),
-        fetch("/api/boarding-window-calculator",{cache:"no-store"})
+        fetch("/api/boarding-window-calculator",{cache:"no-store"}),
+        fetch("/api/wind-reports",{cache:"no-store"})
       ]);
-      const [e,s,i,w,cw]=await Promise.all([er.json(),sr.json(),ir.json(),wr.json(),cr.json()]);
+      const [e,s,i,w,cw,wind]=await Promise.all([er.json(),sr.json(),ir.json(),wr.json(),cr.json(),windr.json()]);
       if(!er.ok)throw new Error(e?.error||"Unable to load environmental feeds");
       if(!sr.ok)throw new Error(s?.error||"Unable to load schedule");
-      setEnv(e);setSchedule(s);setInsights(ir.ok===false?null:i);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);
+      setEnv(e);setSchedule(s);setInsights(ir.ok===false?null:i);setWindows(wr.ok===false?null:w);setCalcWindows(cr.ok===false?null:cw);setWinds(windr.ok===false?null:wind);
     }catch(e){setErr(e.message);}finally{setLoading(false);}
   }
   useEffect(()=>{load();const c=setInterval(()=>setClock(new Date()),30000),r=setInterval(load,60000);return()=>{clearInterval(c);clearInterval(r)}},[]);
@@ -108,7 +109,7 @@ export default function Home(){
       {tab==="Schedule"?<ScheduleBoard schedule={schedule} moving={moving} expected={expected} arriving={arriving} inPort={inPort}/>:
        tab==="Environmental"?<EnvironmentalOnly env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>:
        tab==="AI Insights"?<AIInsights insights={insights} env={env} schedule={schedule} calcWindows={calcWindows}/>:
-       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
+       <Overview env={env} schedule={schedule} windows={windows} calcWindows={calcWindows} winds={winds} moving={moving} expected={expected} arriving={arriving} inPort={inPort} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/>}
       <div className="commandBar"><button>＋</button><input placeholder="Ask about the schedule, vessels, weather, or run a what-if…"/><button>→</button></div>
     </main>
   </div>;
@@ -190,7 +191,7 @@ function AIInsights({insights,env,schedule,calcWindows}){
   </section>;
 }
 
-function Overview({env,schedule,windows,calcWindows,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
+function Overview({env,schedule,windows,calcWindows,winds,moving,expected,arriving,inPort,cam,lb36,camPred,loading,err}){
   const modeled=liveUpcoming24h(moving,expected);
   return <section className="mainGrid"><div className="leftCol"><div className="metrics"><Metric n={moving.length} label="Vessels in VTIS" sub="Moving within region"/><Metric n={expected.length} label="Expected to Move" sub="Live schedule"/><Metric n={arriving.length} label="At or Near the Bar" sub="Arriving / Anchored"/><Metric n={inPort.length} label="Vessels in Port" sub="All facilities"/></div>
   <Card title="Live / Upcoming Traffic" right="NOW + 24 HOURS"><div className="tableWrap"><table className="overviewTraffic"><thead><tr>
@@ -216,7 +217,7 @@ function Overview({env,schedule,windows,calcWindows,moving,expected,arriving,inP
     <td className="aiEta">{d.etaICW||"—"}</td>
   </tr>}):<tr><td colSpan="12">No live or scheduled movements in the next 24 hours.</td></tr>}</tbody></table></div></Card>
   <Card title="AI Traffic Recommendation"><div className="recommendation"><div className="eyebrow">INITIAL PLANNING LOGIC</div><h2>Protect the narrowest environmental windows first.</h2><p>LCPTMS now has live structured schedule data. The next layer will compare vessel ETAs against current/tide windows and traffic constraints.</p></div></Card></div>
-  <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/><CalculatedBoardingWindows calc={calcWindows} rules={windows}/></div></section>
+  <div className="rightCol"><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} winds={winds} loading={loading} err={err}/><CalculatedBoardingWindows calc={calcWindows} rules={windows}/></div></section>
 }
 function bwTime(v){
   if(!v)return "—";
@@ -274,7 +275,18 @@ function BoardingWindowsBox({windows}){
 }
 
 function EnvironmentalOnly({env,cam,lb36,camPred,loading,err}){return <div className="rightCol" style={{maxWidth:760}}><EnvironmentalCard env={env} cam={cam} lb36={lb36} camPred={camPred} loading={loading} err={err}/></div>}
-function EnvironmentalCard({env,cam,lb36,camPred,loading,err}){return <Card title="Environmental Conditions" right={loading?"Refreshing…":"60 sec polling"}><div className="envHeroGrid"><EnvHero title="36 BUOY CROSS CURRENT" value={lb36?.display||env?.noaa?.lb36?.display} status={lb36?.trend?.label} timestamp={lb36?.observedLocal} foot="LIVE ONLY • NOAA PORTS"/><EnvHero title="CAMERON CURRENT" value={cam?.actual?.display||env?.noaa?.cameron?.display} status={cam?.actual?.inboundEffect?`INBOUND ${cam.actual.inboundEffect}`:"—"} timestamp={cam?.actual?.observedLocal} foot={cam?.actual?.outboundEffect?`OUTBOUND ${cam.actual.outboundEffect}`:"NOAA PORTS"}/></div><div className="currentCompare"><div><span>ACTUAL</span><b>{cam?.actual?.speedKt!=null?`${cam.actual.speedKt.toFixed(2)} kt ${cam.actual.phase}`:"—"}</b></div><div><span>PREDICTED NOW</span><b>{cam?.predictedNow?.speed!=null?`${cam.predictedNow.speed.toFixed(2)} kt ${cam.predictedNow.phase}`:"—"}</b></div><div><span>RESIDUAL</span><b>{cam?.deviationKt!=null?`${cam.deviationKt>=0?"+":""}${cam.deviationKt.toFixed(2)} kt`:"—"}</b></div></div><CurrentOutlook prediction={camPred}/>{err&&<div className="error">{err}</div>}</Card>}
+function EnvironmentalCard({env,cam,lb36,camPred,winds,loading,err}){return <Card title="Environmental Conditions" right={loading?"Refreshing…":"60 sec polling"}><div className="envHeroGrid"><EnvHero title="36 BUOY CROSS CURRENT" value={lb36?.display||env?.noaa?.lb36?.display} status={lb36?.trend?.label} timestamp={lb36?.observedLocal} foot="LIVE ONLY • NOAA PORTS"/><EnvHero title="CAMERON CURRENT" value={cam?.actual?.display||env?.noaa?.cameron?.display} status={cam?.actual?.inboundEffect?`INBOUND ${cam.actual.inboundEffect}`:"—"} timestamp={cam?.actual?.observedLocal} foot={cam?.actual?.outboundEffect?`OUTBOUND ${cam.actual.outboundEffect}`:"NOAA PORTS"}/></div><div className="currentCompare"><div><span>ACTUAL</span><b>{cam?.actual?.speedKt!=null?`${cam.actual.speedKt.toFixed(2)} kt ${cam.actual.phase}`:"—"}</b></div><div><span>PREDICTED NOW</span><b>{cam?.predictedNow?.speed!=null?`${cam.predictedNow.speed.toFixed(2)} kt ${cam.predictedNow.phase}`:"—"}</b></div><div><span>RESIDUAL</span><b>{cam?.deviationKt!=null?`${cam.deviationKt>=0?"+":""}${cam.deviationKt.toFixed(2)} kt`:"—"}</b></div></div><CurrentOutlook prediction={camPred}/>
+<div className="windReports">
+  <WindReport label="Calcasieu Pass Wind" report={winds?.calcasieuPass}/>
+  <WindReport label="Lake Charles Regional Wind" report={winds?.lakeCharlesRegional}/>
+</div>
+{err&&<div className="error">{err}</div>}</Card>}
+function WindReport({label,report}){
+  const speed=report?.speedKt, gust=report?.gustKt;
+  const text=speed!=null?`${report?.direction||"—"} ${speed.toFixed(0)} kt${gust!=null&&gust>speed+0.5?` G${gust.toFixed(0)}`:""}`:"—";
+  return <div className="windReportRow"><span>{label}</span><b>{text}</b><small>{report?.source||"—"}</small></div>;
+}
+
 function CurrentOutlook({prediction}) {
   const pts = (prediction || []).filter(p => p && Number.isFinite(Number(p.speed)));
   if (pts.length < 2) {

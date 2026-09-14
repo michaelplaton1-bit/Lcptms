@@ -109,3 +109,11 @@ main{padding:0 16px 24px;min-width:0}.topbar{height:70px;border-bottom:1px solid
 .biasGrid span,.biasGrid small{display:block;color:#8fa0ac;font-size:8px}
 .biasGrid b{display:block;margin:5px 0;font-size:17px}
 .learningNote{margin-top:10px;color:#9cabb5;font-size:10px;line-height:1.45}
+
+
+/* v1.7.2 restored dual wind inputs */
+.windReports{margin-top:10px;border-top:1px solid #27333b}
+.windReportRow{display:grid;grid-template-columns:1.4fr 1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #27333b;font-size:10px}
+.windReportRow span{color:#dce5ea}
+.windReportRow b{font-size:11px;color:#f6f8f9}
+.windReportRow small{font-size:8px;color:#7e919d;text-align:right}
