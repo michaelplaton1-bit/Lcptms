@@ -17,8 +17,23 @@ jobs:
             https://lcptms.vercel.app/api/learning-auth-diagnostic
 
       - name: Capture LCPTMS learning snapshot
+        shell: bash
         run: |
-          curl --fail --silent --show-error \
+          set +e
+          HTTP_CODE=$(curl --silent --show-error \
+            -o /tmp/lcptms_capture.json \
+            -w "%{http_code}" \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
-            https://lcptms.vercel.app/api/learning-capture
+            https://lcptms.vercel.app/api/learning-capture)
+
+          echo
+          echo "LCPTMS capture HTTP status: ${HTTP_CODE}"
+          echo "LCPTMS capture response:"
+          cat /tmp/lcptms_capture.json
+          echo
+
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "Learning capture failed."
+            exit 1
+          fi
