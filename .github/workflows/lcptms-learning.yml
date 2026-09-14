@@ -9,6 +9,13 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     steps:
+      - name: Diagnose LCPTMS learning authentication
+        run: |
+          echo "Calling safe auth diagnostic..."
+          curl --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
+            https://lcptms.vercel.app/api/learning-auth-diagnostic
+
       - name: Capture LCPTMS learning snapshot
         run: |
           curl --fail --silent --show-error \
