@@ -8,7 +8,7 @@ export async function GET(){
   }catch(e){
     return Response.json({
       calculatorVersion:"0.1.0",
-      mode:"VALIDATION",
+      mode:"LCPTMS_INDEPENDENT_PREDICTION_ONLY",
       error:"Boarding window calculation failed",
       detail:e?.message||"unknown error"
     },{status:500,headers:{"Cache-Control":"no-store"}});
