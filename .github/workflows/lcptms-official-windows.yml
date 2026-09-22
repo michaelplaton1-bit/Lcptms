@@ -9,6 +9,13 @@ jobs:
   capture-and-compare:
     runs-on: ubuntu-latest
     steps:
+      - name: Inspect official schedule data shape
+        run: |
+          curl --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
+            https://lcptms.vercel.app/api/lcp-currentset-diagnostic
+          echo
+
       - name: Capture posted schedule times and compare LCPTMS calculations
         shell: bash
         run: |
