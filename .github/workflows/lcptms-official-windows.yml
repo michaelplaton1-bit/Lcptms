@@ -1,36 +1,11 @@
-name: LCPTMS Posted Window Comparison
+name: LCPTMS Posted Window Comparison (Archived)
 
 on:
-  schedule:
-    - cron: "17 0,12 * * *"
   workflow_dispatch:
 
 jobs:
-  capture-and-compare:
+  archived:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect official schedule data shape
-        run: |
-          curl --silent --show-error \
-            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
-            https://lcptms.vercel.app/api/lcp-currentset-diagnostic
-          echo
-
-      - name: Capture posted schedule times and compare LCPTMS calculations
-        shell: bash
-        run: |
-          set +e
-          HTTP_CODE=$(curl --silent --show-error \
-            -o /tmp/lcptms_official_windows.json \
-            -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
-            https://lcptms.vercel.app/api/official-window-capture)
-
-          echo "LCPTMS posted-window capture HTTP status: ${HTTP_CODE}"
-          cat /tmp/lcptms_official_windows.json
-          echo
-
-          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
-            exit 1
-          fi
+      - run: echo "Archived. LCPTMS now predicts boarding windows independently."
