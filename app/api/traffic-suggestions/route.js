@@ -18,7 +18,7 @@ export async function GET(){
       suggestions.push({
         type:"LEARNING",
         title:"Operational learning active",
-        text:"LCPTMS is collecting schedule, traffic, current, tide, wind, and official-window comparisons. No validated traffic adjustment is ready yet."
+        text:"LCPTMS is collecting schedule, traffic, current, tide, and wind data while independently predicting boarding windows."
       });
     }
     return Response.json({generatedAt:a?.generatedAt||null,suggestions:suggestions.slice(0,3)},{headers:{"Cache-Control":"no-store"}});
