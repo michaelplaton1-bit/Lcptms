@@ -4,10 +4,13 @@ import { learningCaptureAuthorized } from "../../../lib/adminAuth.js";
 import { writeSnapshot, recentSnapshots, writeLatestLearning, learningStoreConfigured } from "../../../lib/persistentLearningStore.js";
 import { analyzeLearning } from "../../../lib/persistentLearningEngine.js";
 
-async function stageFetch(origin,path,name,stages){
+async function stageFetch(origin,path,name,stages,authorization){
   const started=Date.now();
   try{
-    const r=await fetch(`${origin}${path}`,{cache:"no-store"});
+    const r=await fetch(`${origin}${path}`,{
+      cache:"no-store",
+      headers:authorization?{Authorization:authorization}:{}
+    });
     const text=await r.text();
     let body=null;
     try{body=JSON.parse(text);}catch{body={raw:text.slice(0,1000)}}
@@ -65,15 +68,16 @@ async function capture(request){
   }
 
   const origin=new URL(request.url).origin;
+  const authorization=request.headers.get("authorization");
   const capturedAt=new Date().toISOString();
 
   let schedule,environment,windows,validation,winds;
   try{
-    schedule=await stageFetch(origin,"/api/schedule","schedule",stages);
-    environment=await stageFetch(origin,"/api/environment","environment",stages);
-    windows=await stageFetch(origin,"/api/boarding-window-calculator","boarding_window_calculator",stages);
-    validation=await stageFetch(origin,"/api/boarding-window-validation","boarding_window_validation",stages);
-    winds=await stageFetch(origin,"/api/wind-reports","wind_reports",stages);
+    schedule=await stageFetch(origin,"/api/schedule","schedule",stages,authorization);
+    environment=await stageFetch(origin,"/api/environment","environment",stages,authorization);
+    windows=await stageFetch(origin,"/api/boarding-window-calculator","boarding_window_calculator",stages,authorization);
+    validation=await stageFetch(origin,"/api/boarding-window-validation","boarding_window_validation",stages,authorization);
+    winds=await stageFetch(origin,"/api/wind-reports","wind_reports",stages,authorization);
   }catch(e){
     return Response.json({
       ok:false,
