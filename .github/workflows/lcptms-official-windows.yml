@@ -1,0 +1,29 @@
+name: LCPTMS Posted Window Comparison
+
+on:
+  schedule:
+    - cron: "17 0,12 * * *"
+  workflow_dispatch:
+
+jobs:
+  capture-and-compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture posted schedule times and compare LCPTMS calculations
+        shell: bash
+        run: |
+          set +e
+          HTTP_CODE=$(curl --silent --show-error \
+            -o /tmp/lcptms_official_windows.json \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.LCPTMS_LEARNING_SECRET }}" \
+            https://lcptms.vercel.app/api/official-window-capture)
+
+          echo "LCPTMS posted-window capture HTTP status: ${HTTP_CODE}"
+          cat /tmp/lcptms_official_windows.json
+          echo
+
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            exit 1
+          fi
