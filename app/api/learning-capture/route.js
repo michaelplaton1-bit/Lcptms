@@ -71,12 +71,11 @@ async function capture(request){
   const authorization=request.headers.get("authorization");
   const capturedAt=new Date().toISOString();
 
-  let schedule,environment,windows,validation,winds;
+  let schedule,environment,windows,winds;
   try{
     schedule=await stageFetch(origin,"/api/schedule","schedule",stages,authorization);
     environment=await stageFetch(origin,"/api/environment","environment",stages,authorization);
     windows=await stageFetch(origin,"/api/boarding-window-calculator","boarding_window_calculator",stages,authorization);
-    validation=await stageFetch(origin,"/api/boarding-window-validation","boarding_window_validation",stages,authorization);
     winds=await stageFetch(origin,"/api/wind-reports","wind_reports",stages,authorization);
   }catch(e){
     return Response.json({
@@ -96,7 +95,7 @@ async function capture(request){
     notes:schedule.notes||null,
     environment,
     calculatedWindows:windows,
-    windowValidation:validation,
+    windowValidation:null,
     winds
   };
 
