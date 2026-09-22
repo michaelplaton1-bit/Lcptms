@@ -168,7 +168,6 @@ function PilotRow({m,type}){const d=m.display||{},n=m.native||{};return <tr>
 function AIInsights({insights,env,schedule,calcWindows}){
   const findings=insights?.findings||[];
   const activity=insights?.recentActivity||[];
-  const cats=insights?.windowAccuracy?.categories||[];
   const s=insights?.summary||{};
   return <section className="insightsPage">
     <div className="adminPrivateBanner">PRIVATE ADMIN VIEW · Persistent learning history is not shown to normal LCPTMS users.</div>
@@ -176,7 +175,7 @@ function AIInsights({insights,env,schedule,calcWindows}){
       <Metric n={insights?.snapshotCount||0} label="Learning Snapshots" sub="Persistent off-site history"/>
       <Metric n={s.uniqueJobsObserved||0} label="Unique Jobs Learned" sub="Tracked by LogID"/>
       <Metric n={s.pbtRevisionJobs||0} label="PBT Revision Jobs" sub="Ordered/PBT remain separate"/>
-      <Metric n={s.officialWindowsCompared||0} label="Windows Compared" sub="LCPTMS vs official LCP"/>
+      <Metric n={(calcWindows?.categories||[]).length} label="Window Models" sub="LCPTMS independent predictions"/>
     </div>
 
     <Card title="Live Learning Activity" right={insights?.lastSnapshotAt?`UPDATED ${fmtDateTime(insights.lastSnapshotAt)}`:"WAITING FOR FIRST CAPTURE"}>
@@ -184,24 +183,6 @@ function AIInsights({insights,env,schedule,calcWindows}){
         {activity.length?activity.map((a,i)=><div className="activityRow" key={`${a.logId}-${i}`}>
           <span>{fmtDateTime(a.at)}</span><b>{a.type.replaceAll("_"," ")}</b><p>{a.detail}</p>
         </div>):<div className="emptyLearning">No stored schedule changes yet. The background collector will begin building this list after multiple captures.</div>}
-      </div>
-    </Card>
-
-    <Card title="Boarding Window Accuracy" right="LCPTMS vs LAKECHARLESPILOTS.COM">
-      <div className="windowAccuracyGrid">
-        {cats.length?cats.map(c=><div className="accuracyCard" key={c.id}>
-          <div className="findingHead"><b>{c.label}</b><span>{c.confidence} · n={c.sampleSize}</span></div>
-          <div className="accuracyNumbers">
-            <div><span>RAW MAE</span><b>{c.rawMAEminutes!=null?`${c.rawMAEminutes} min`:"—"}</b></div>
-            <div><span>BIAS-ADJUSTED MAE</span><b>{c.adjustedMAEminutes!=null?`${c.adjustedMAEminutes} min`:"—"}</b></div>
-            <div><span>IMPROVEMENT</span><b>{c.adjustmentImprovementMinutes!=null?`${c.adjustmentImprovementMinutes>=0?"+":""}${c.adjustmentImprovementMinutes} min`:"—"}</b></div>
-          </div>
-          {c.latest?.official?<div className="latestWindowCompare">
-            <span>Latest official: {bwTime(c.latest.official.open)} → {bwTime(c.latest.official.close)}</span>
-            <span>Raw error: {c.latest.rawErrorMinutes?`${c.latest.rawErrorMinutes.open>=0?"+":""}${c.latest.rawErrorMinutes.open} / ${c.latest.rawErrorMinutes.close>=0?"+":""}${c.latest.rawErrorMinutes.close} min`:"—"}</span>
-            <span>Adjusted error: {c.latest.adjustedErrorMinutes?`${c.latest.adjustedErrorMinutes.open>=0?"+":""}${c.latest.adjustedErrorMinutes.open} / ${c.latest.adjustedErrorMinutes.close>=0?"+":""}${c.latest.adjustedErrorMinutes.close} min`:"—"}</span>
-          </div>:null}
-        </div>):<div className="emptyLearning">Official-window comparisons will appear after the collector successfully parses and stores multiple LC AI Current Set cycles.</div>}
       </div>
     </Card>
 
@@ -339,7 +320,7 @@ function BoardingWindowsBox({windows}){
           <div className="windowRule closeRule"><span>CLOSE</span>{rule.closeRule.replace(/^CLOSE\s*/i,"")}</div>
         </div>
       })}
-      <div className="windowAuthority">Third-party official OPEN/CLOSE set remains authoritative while LCPTMS calculation is being validated.</div>
+      <div className="windowAuthority">LCPTMS independently predicts these windows from NOAA current and tide data using the configured operating parameters.</div>
     </div>
   </Card>;
 }
